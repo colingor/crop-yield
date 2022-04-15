@@ -10,12 +10,13 @@ from typing import List
 from zipfile import ZipFile
 
 import click
+import earthpy.plot as ep
 import geojson
 import geopandas as gpd
 import kml2geojson
-
 # from osgeo import gdal
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import rasterio
 import shapely
@@ -402,10 +403,6 @@ class CropDataHandler:
             # Add raster paths to dataframe so we can easily look them up
             [_add_band_filepath(band) for band in ALL_BANDS]
 
-            # Can work out the path to a product like this
-            # raster_file_path = Path(product[BAND_8_10M])
-            # raster = f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/all_farms/{raster_file_path.parent.name}/{raster_file_path.name}"
-
         else:
             log.debug(f"Skipping as product {product['title']} as associated rasters not found")
 
@@ -496,6 +493,37 @@ class CropDataHandler:
 
         products = products.apply(self.process_products_for_farms, axis=1)
 
+    def preview_farm_bands(self):
+        """
+        Experiments with viewing cropped fields.  WIP
+        """
+
+        # Pick a farm
+        farm_name = self.farm_bounds_32643.iloc[0]["name"]
+        products = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
+        first_product = products.iloc[0]
+
+        # Get all bands paths for this product
+        band_paths = (
+            self.get_farm_raster_for_band(farm_name, first_product, band)
+            for band in (BAND_2_10M, BAND_3_10M, BAND_4_10M, BAND_8_10M)
+        )
+
+        band_paths = filter(None, band_paths)
+
+        l = []
+        for i in band_paths:
+            with rasterio.open(i, "r") as f:
+                l.append(f.read(1))
+
+        arr_st = np.stack(l)
+        print(f"Height: {arr_st.shape[1]}\nWidth: {arr_st.shape[2]}\nBands: {arr_st.shape[0]}")
+
+        ep.plot_bands(arr_st, cmap="gist_earth", figsize=(20, 12), cols=6, cbar=False)
+        plt.show()
+
+        rgb = ep.plot_rgb(arr_st, rgb=(3, 2, 1), figsize=(8, 10), title="RGB Composite Image")
+
     def create_cropped_rgb_image(self):
         """
         Test creating an rgb image for a farm
@@ -545,15 +573,20 @@ class CropDataHandler:
         :return:
         """
 
-        # Original raster was .jp2, we converted to .tif
-        raster_file_path = Path(product[band]).with_suffix(".tif")
+        raster_path = product[band]
+        if raster_path:
+            # Original raster was .jp2, we converted to .tif
+            raster_file_path = Path(raster_path).with_suffix(".tif")
 
-        # Construct path to raster band that has been cropped for specified farm
-        raster_file_path = (
-            f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/{farm_name}/"
-            f"{raster_file_path.parent.name}/{raster_file_path.name}"
-        )
-        return raster_file_path
+            # Construct path to raster band that has been cropped for specified farm
+            raster_file_path = (
+                f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/{farm_name}/"
+                f"{raster_file_path.parent.name}/{raster_file_path.name}"
+            )
+            return raster_file_path
+        else:
+            log.debug(f"No band path found")
+            return None
 
 
 @click.command(context_settings=dict(ignore_unknown_options=True))
@@ -595,6 +628,7 @@ def main(download, crop_all, crop_individual_farms, sentinel_date_range):
         crop_data_handler.crop_rasters_to_individual_fields_bbox()
 
     # crop_data_handler.create_cropped_rgb_image()
+    # crop_data_handler.preview_farm_bands()
 
     log.debug("Done")
 
