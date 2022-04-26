@@ -14,6 +14,7 @@ import earthpy.plot as ep
 import geojson
 import geopandas as gpd
 import kml2geojson
+
 # from osgeo import gdal
 import matplotlib.pyplot as plt
 import numpy as np
@@ -73,6 +74,9 @@ FARMS_KMZ = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.kmz"
 FARMS_KML = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.kml"
 FARMS_GEOJSON = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.geojson"
 SENTINEL_PRODUCTS_GEOJSON = f"{FARM_SENTINEL_DATA_DIRECTORY}/products.geojson"
+
+# Create logs dir if it doesn't already exist
+os.makedirs("logs", exist_ok=True)
 
 file_handler = logging.handlers.RotatingFileHandler("logs/crop.log", maxBytes=2048, backupCount=5)
 logging.basicConfig(
