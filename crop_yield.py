@@ -205,14 +205,11 @@ class CropDataHandler:
             )
         self.api = SentinelAPI(user, password, "https://scihub.copernicus.eu/dhus")
 
-    def _save_sentinel_product_list_and_download(self):
+    def download_sentinel_product_files(self):
         """
-        Write products dataframe to filesystem
         Attempt to download each product in the dataframe
         :return:
         """
-        # Save the products so we have a record
-        self.save_products_df_to_geojson()
 
         def _download(area: GeoDataFrame):
             uuid = area["uuid"]
@@ -326,7 +323,7 @@ class CropDataHandler:
         """
         self.get_available_sentinel_products_df()
 
-        self._save_sentinel_product_list_and_download()
+        # self.download_sentinel_product_files()
 
         self.unzip_sentinel_products()
 
@@ -335,6 +332,12 @@ class CropDataHandler:
             f"{FARM_SENTINEL_DATA_DIRECTORY}/*.SAFE",
             recursive=False,
         )
+
+        # Add paths to the various product bands
+        self.products_df = self.products_df.apply(self.add_band_paths_to_product, axis=1)
+
+        # Save the products so we have a record
+        self.save_products_df_to_geojson()
 
         total_available_products = len(self.products_df)
 
@@ -352,8 +355,8 @@ class CropDataHandler:
         Unzip all products
         """
 
-        def _unzip_if_required(sentinal_zip):
-            file_path = f"{FARM_SENTINEL_DATA_DIRECTORY}/{sentinal_zip}"
+        def _unzip_if_required(sentinel_zip):
+            file_path = f"{FARM_SENTINEL_DATA_DIRECTORY}/{sentinel_zip}"
             unzipped_filename = Path(file_path).with_suffix(".SAFE")
             if not os.path.exists(unzipped_filename):
                 if zipfile.is_zipfile(file_path):
@@ -364,9 +367,9 @@ class CropDataHandler:
                 log.debug(f"Not unzipping as {unzipped_filename} already exists")
 
         [
-            _unzip_if_required(sentinal_zip)
-            for sentinal_zip in os.listdir(FARM_SENTINEL_DATA_DIRECTORY)
-            if sentinal_zip.endswith(".zip")
+            _unzip_if_required(sentinel_zip)
+            for sentinel_zip in os.listdir(FARM_SENTINEL_DATA_DIRECTORY)
+            if sentinel_zip.endswith(".zip")
         ]
 
     def crop_raster_to_geometry(
@@ -430,10 +433,9 @@ class CropDataHandler:
         else:
             log.debug(f"Skipping as {raster_file_path} already exists. To recreate, set force_recreate=True")
 
-    def process_product_dataframe_and_rasters(self, product: Series):
+    def crop_product_rasters_to_all_fields(self, product: Series):
         """
-        For every row in the products dataframe, crop the downloaded rasters to overall farm bounds and
-        add band paths to products dataframe
+        For every row in the products dataframe, crop the downloaded rasters to overall farm bounds
         :param product: Series
         :return: product:Series
         """
@@ -444,6 +446,23 @@ class CropDataHandler:
 
             # Crop all original rasters to all farms geom
             [self.crop_raster_to_geometry(raster, self.total_bbox_32643, "all_farms") for raster in original_rasters]
+
+        else:
+            log.debug(f"Skipping as product {product['title']} as associated rasters not found")
+
+        return product
+
+    def add_band_paths_to_product(self, product: Series):
+        """
+        For every row in the products dataframe
+        add band paths to products dataframe
+        :param product: Series
+        :return: product:Series
+        """
+
+        original_rasters: list = self.get_original_product_rasters(product)
+
+        if original_rasters:
 
             def _add_band_filepath(band):
                 """
@@ -470,12 +489,12 @@ class CropDataHandler:
         self.check_products_geojson_exists()
 
         # Crop rasters to overall farm bounds and add band paths for each product
-        self.products_df = self.products_df.apply(self.process_product_dataframe_and_rasters, axis=1)
+        self.products_df = self.products_df.apply(self.crop_product_rasters_to_all_fields, axis=1)
 
         # Save updated products
         self.save_products_df_to_geojson()
 
-        log.debug(self.products_df)
+        log.debug("All rasters successfully cropped to overall farms bbox")
 
     def check_products_geojson_exists(self):
         """
