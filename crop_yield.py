@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import sys
 import zipfile
@@ -15,14 +16,15 @@ import geojson
 import geopandas as gpd
 import kml2geojson
 
-# from osgeo import gdal
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rasterio
 import shapely
+from dateutil import parser
 from fiona.crs import from_epsg
 from geopandas import GeoDataFrame
+from matplotlib import gridspec
 from pandas import Series
 from rasterio import plot
 from rasterio.mask import mask
@@ -38,6 +40,7 @@ BAND_2_10M = "B02_10m"
 BAND_3_10M = "B03_10m"
 BAND_4_10M = "B04_10m"
 BAND_8_10M = "B08_10m"
+BAND_TCI_10M = "TCI_10m"
 
 BAND_5_20M = "B05_20m"
 BAND_6_20M = "B06_20m"
@@ -45,10 +48,12 @@ BAND_7_20M = "B07_20m"
 BAND_8A_20M = "B8A_20m"
 BAND_11_20M = "B11_20m"
 BAND_12_20M = "B12_20m"
+BAND_SCL_20M = "SCL_20m"
+BAND_TCI_20M = "TCI_20m"
 
 BAND_01_60M = "B01_60m"
 BAND_09_60M = "B09_60m"
-BAND_10_60M = "B10_60m"  # Doesn't seem to exist in the dataset?
+BAND_10_60M = "B10_60m"  # https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/processing-levels/level-2 (the cirrus band 10 is omitted, as it does not contain surface information)
 
 ALL_BANDS = (
     BAND_2_10M,
@@ -64,11 +69,17 @@ ALL_BANDS = (
     BAND_01_60M,
     BAND_09_60M,
     BAND_10_60M,
+    BAND_TCI_10M,
+    BAND_SCL_20M,
+    BAND_TCI_20M,
 )
+
+REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M
 
 log = logging.getLogger(__name__)
 DATA_DIRECTORY = "data"
 FARM_SENTINEL_DATA_DIRECTORY = f"{DATA_DIRECTORY}/sentinel2"
+FARM_SUMMARIES_DIRECTORY = f"{FARM_SENTINEL_DATA_DIRECTORY}/farm_summaries"
 FARM_LOCATIONS_DIRECTORY = f"{DATA_DIRECTORY}/farm_locations"
 FARMS_KMZ = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.kmz"
 FARMS_KML = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.kml"
@@ -93,6 +104,7 @@ class CropDataHandler:
     total_bbox_32643: Polygon = None
     total_bbox: GeoDataFrame = None
     farm_bounds_32643: GeoDataFrame = None
+    products_df: GeoDataFrame = None
 
     def __post_init__(self):
         self.initialise()
@@ -108,6 +120,7 @@ class CropDataHandler:
 
         # Ensure directory to store Sentinel2 data exists
         os.makedirs(FARM_SENTINEL_DATA_DIRECTORY, exist_ok=True)
+        os.makedirs(FARM_SUMMARIES_DIRECTORY, exist_ok=True)
 
         # Create api instance
         self.configure_api()
@@ -149,6 +162,10 @@ class CropDataHandler:
         # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
         # It seems rasterio won't work with 3D geometry
         self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
+
+        if os.path.exists(SENTINEL_PRODUCTS_GEOJSON):
+            self.products_df = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
+
         log.info(f"Finished setup")
 
     def convert_3D_2D(self, geometry):
@@ -188,29 +205,28 @@ class CropDataHandler:
             )
         self.api = SentinelAPI(user, password, "https://scihub.copernicus.eu/dhus")
 
-    def _save_sentinel_product_list_and_download(self, products: GeoDataFrame):
+    def _save_sentinel_product_list_and_download(self):
         """
         Write products dataframe to filesystem
         Attempt to download each product in the dataframe
-        :param products:
         :return:
         """
         # Save the products so we have a record
-        products.to_file(SENTINEL_PRODUCTS_GEOJSON, driver="GeoJSON")
+        self.save_products_df_to_geojson()
 
         def _download(area: GeoDataFrame):
             uuid = area["uuid"]
             identifier = area["identifier"]
-            if not os.path.exists(f"{FARM_SENTINEL_DATA_DIRECTORY}/{identifier}.zip"):
+            if not os.path.exists(f"{FARM_SENTINEL_DATA_DIRECTORY}/{identifier}.SAFE"):
                 log.debug(f"About to download {uuid}")
                 try:
                     self.api.download(uuid, directory_path=FARM_SENTINEL_DATA_DIRECTORY, checksum=False)
                 except Exception as e:
-                    log.error(f"Problem downloading {e}")
+                    log.error(f"Problem downloading: {e}")
             else:
                 log.debug(f"We already have a file for {identifier}")
 
-        products.apply(_download, axis=1)
+        self.products_df.apply(_download, axis=1)
 
     def get_all_farms_bounding_box_wkt(self):
         """
@@ -231,12 +247,19 @@ class CropDataHandler:
             # date=("20210401", "20220401"),
             platformname="Sentinel-2",
             processinglevel="Level-2A",
-            cloudcoverpercentage=(0, 20),
+            cloudcoverpercentage=(0, 99),
         )
 
-        products_df = self.api.to_geodataframe(products)
+        self.products_df = self.api.to_geodataframe(products)
         # products_df = products_df.sort_values(["cloudcoverpercentage"], ascending=[True])
-        products_df = products_df.sort_values(["generationdate"], ascending=[True])
+        self.products_df = self.products_df.sort_values(["generationdate"], ascending=[True])
+
+        # Filter products_df on tile id
+        # products_df = products_df.loc[products_df['title'].str.contains("T43PFT", case=False)]
+
+        # Granule T43PFS contains all the farms
+        self.products_df = self.products_df.loc[self.products_df["title"].str.contains("T43PFS", case=False)]
+        log.debug(f"{len(self.products_df)} products available for tile number T43PFS")
 
         if verify_products:
             # Various plots below to debug product and farm positions
@@ -245,19 +268,19 @@ class CropDataHandler:
             farm_bounds = gpd.read_file(FARMS_GEOJSON)
 
             # Simple plot to show product positions
-            plot = products_df.plot(column="uuid", cmap=None)
-            plt.savefig("test.jpg")
+            plot = self.products_df.plot(column="uuid", cmap=None)
+            # plt.savefig("test.jpg")
             plt.show()
 
             # Product positions with uuids overlaid
-            ax = products_df.plot(column="uuid", cmap=None, figsize=(20, 20))
+            ax = self.products_df.plot(column="uuid", cmap=None, figsize=(20, 20))
             # products_df.apply(lambda x: ax.annotate(s=x.uuid, xy=x.geometry.centroid.coords[0], ha='center'),axis=1)
-            products_df.apply(
+            self.products_df.apply(
                 lambda x: ax.annotate(text=x["uuid"], xy=x.geometry.centroid.coords[0], ha="center"), axis=1
             )
 
             # Simple plot to show red fields on white background
-            base = products_df.plot(color="white", edgecolor="black")
+            base = self.products_df.plot(color="white", edgecolor="black")
             farm_bounds.plot(ax=base, marker="o", color="red", markersize=5)
 
             plt.show()
@@ -268,20 +291,20 @@ class CropDataHandler:
             # *****
 
             # Plot the products titles to see positions
-            ax = products_df.plot(column="title", cmap=None, figsize=(50, 50), alpha=0.3)
-            products_df.apply(
+            ax = self.products_df.plot(column="title", cmap=None, figsize=(50, 50), alpha=0.3)
+            self.products_df.apply(
                 lambda x: ax.annotate(text=x["title"], xy=x.geometry.centroid.coords[0], ha="center"), axis=1
             )
             plt.show()
 
             # Plot products names and farm names
             f, ax = plt.subplots(1)
-            products_df.plot(
+            self.products_df.plot(
                 ax=ax,
                 column="uuid",
                 cmap="OrRd",
             )
-            products_df.apply(
+            self.products_df.apply(
                 lambda x: ax.annotate(text=x["title"], xy=x.geometry.centroid.coords[0], ha="center"), axis=1
             )
 
@@ -293,33 +316,44 @@ class CropDataHandler:
             plt.show()
 
             # Show field outlines on both products
-            base = products_df.plot(color="white", edgecolor="black")
+            base = self.products_df.plot(color="white", edgecolor="black")
             farm_bounds.plot(ax=base, marker="o", color="red", markersize=5)
-
-        return products_df
 
     def download_sentinel_products(self):
         """
         Get available sentinel 2 products and download
         :return:
         """
-        products_df = self.get_available_sentinel_products_df()
+        self.get_available_sentinel_products_df()
 
-        # Filter products_df on tile id
-        # products_df = products_df.loc[products_df['title'].str.contains("T43PFT", case=False)]
+        self._save_sentinel_product_list_and_download()
 
-        # Granule T43PFS contains all the farms
-        products_df = products_df.loc[products_df["title"].str.contains("T43PFS", case=False)]
-        log.debug(f"{len(products_df)} products available for tile number T43PFS")
-        self._save_sentinel_product_list_and_download(products_df)
+        self.unzip_sentinel_products()
+
+        # Validate results
+        unzipped_products = glob(
+            f"{FARM_SENTINEL_DATA_DIRECTORY}/*.SAFE",
+            recursive=False,
+        )
+
+        total_available_products = len(self.products_df)
+
+        remaining = total_available_products - len(unzipped_products)
+
+        if remaining:
+            msg = f"Note that there are {remaining}/{total_available_products} products which have not yet been downloaded. Please re-run the download function"
+            log.info(msg)
+            sys.exit(msg)
+
         log.debug("Product Download is complete")
 
     def unzip_sentinel_products(self):
         """
         Unzip all products
         """
-        for file in os.listdir(FARM_SENTINEL_DATA_DIRECTORY):
-            file_path = f"{FARM_SENTINEL_DATA_DIRECTORY}/{file}"
+
+        def _unzip_if_required(sentinal_zip):
+            file_path = f"{FARM_SENTINEL_DATA_DIRECTORY}/{sentinal_zip}"
             unzipped_filename = Path(file_path).with_suffix(".SAFE")
             if not os.path.exists(unzipped_filename):
                 if zipfile.is_zipfile(file_path):
@@ -329,56 +363,72 @@ class CropDataHandler:
             else:
                 log.debug(f"Not unzipping as {unzipped_filename} already exists")
 
+        [
+            _unzip_if_required(sentinal_zip)
+            for sentinal_zip in os.listdir(FARM_SENTINEL_DATA_DIRECTORY)
+            if sentinal_zip.endswith(".zip")
+        ]
+
     def crop_raster_to_geometry(
-        self, raster_file: str, geom: Polygon, cropped_directory_name: str, verify_images=False
+        self, raster_file: str, geom: Polygon, cropped_directory_name: str, verify_images=False, force_recreate=False
     ):
         """
         Crop the specified raster file to self.total_bbox_32643 (combined farms bounding box)
+        :param force_recreate: Recreate a cropped raster even if it already exists
         :param verify_images: Output some plots to sanity check results
         :param cropped_directory_name:
         :param geom: Geometry to crop raster to
         :param raster_file: Relative path the raster file
         """
 
-        with rasterio.open(raster_file) as src:
-            # Note the geometry has to be iterable, hence the list
-            out_img, out_transform = mask(src, [geom], crop=True)
-            out_meta = src.meta.copy()
+        # We want to save as tiff rather than jp2
+        raster_file_path = Path(raster_file).with_suffix(".tif")
 
-            # It seems the output raster is blank if we use JP2OpenJPEG, so go with Gtiff
-            out_meta.update(
-                {"driver": "Gtiff", "height": out_img.shape[1], "width": out_img.shape[2], "transform": out_transform}
-            )
+        cropped_image_dir = f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED"
+        cropped_directory = f"{cropped_image_dir}/{cropped_directory_name}/{raster_file_path.parent.name}"
+        os.makedirs(cropped_directory, exist_ok=True)
 
-            # We want to save as tiff rather than jp2
-            raster_file_path = Path(raster_file).with_suffix(".tif")
+        output_raster = f"{cropped_directory}/{raster_file_path.name}"
 
-            cropped_image_dir = f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED"
-            cropped_directory = f"{cropped_image_dir}/{cropped_directory_name}/{raster_file_path.parent.name}"
-            os.makedirs(cropped_directory, exist_ok=True)
+        if not os.path.exists(output_raster) or force_recreate:
 
-            output_raster = f"{cropped_directory}/{raster_file_path.name}"
+            with rasterio.open(raster_file) as src:
+                # Note the geometry has to be iterable, hence the list
+                out_img, out_transform = mask(src, [geom], crop=True)
+                out_meta = src.meta.copy()
 
-            with rasterio.open(output_raster, "w", **out_meta) as dest:
-                dest.write(out_img)
+                # It seems the output raster is blank if we use JP2OpenJPEG, so go with Gtiff
+                out_meta.update(
+                    {
+                        "driver": "Gtiff",
+                        "height": out_img.shape[1],
+                        "width": out_img.shape[2],
+                        "transform": out_transform,
+                    }
+                )
 
-        if verify_images:
-            # Verify the images look correct
-            with rasterio.open(output_raster) as clipped:
+                with rasterio.open(output_raster, "w", **out_meta) as dest:
+                    dest.write(out_img)
 
-                show((clipped, 1), cmap="terrain")
+            if verify_images:
+                # Verify the images look correct
+                with rasterio.open(output_raster) as clipped:
 
-                # Check bounding box and raster match
-                fig, ax = plt.subplots(figsize=(15, 15))
-                rasterio.plot.show(clipped, ax=ax)
-                self.total_bbox.plot(ax=ax, facecolor="none", edgecolor="r")
-                plt.show()
+                    show((clipped, 1), cmap="terrain")
 
-                # Show the field outlines on the raster
-                fig, ax = plt.subplots(figsize=(15, 15))
-                rasterio.plot.show(clipped, ax=ax)
-                self.farm_bounds_32643.plot(ax=ax, facecolor="none", edgecolor="r")
-                plt.show()
+                    # Check bounding box and raster match
+                    fig, ax = plt.subplots(figsize=(15, 15))
+                    rasterio.plot.show(clipped, ax=ax)
+                    self.total_bbox.plot(ax=ax, facecolor="none", edgecolor="r")
+                    plt.show()
+
+                    # Show the field outlines on the raster
+                    fig, ax = plt.subplots(figsize=(15, 15))
+                    rasterio.plot.show(clipped, ax=ax)
+                    self.farm_bounds_32643.plot(ax=ax, facecolor="none", edgecolor="r")
+                    plt.show()
+        else:
+            log.debug(f"Skipping as {raster_file_path} already exists. To recreate, set force_recreate=True")
 
     def process_product_dataframe_and_rasters(self, product: Series):
         """
@@ -416,19 +466,26 @@ class CropDataHandler:
         """
         Inspect the rasters we have in FARM_SENTINEL_DATA_DIRECTORY and clip to all farm bounds
         """
-        # open products so we have extra info
-        if not os.path.exists(SENTINEL_PRODUCTS_GEOJSON):
-            sys.exit(f"Unable to find file {SENTINEL_PRODUCTS_GEOJSON} - aborting")
-
-        products = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
+        # Check products have been downloaded
+        self.check_products_geojson_exists()
 
         # Crop rasters to overall farm bounds and add band paths for each product
-        products = products.apply(self.process_product_dataframe_and_rasters, axis=1)
+        self.products_df = self.products_df.apply(self.process_product_dataframe_and_rasters, axis=1)
 
         # Save updated products
-        products.to_file(SENTINEL_PRODUCTS_GEOJSON, driver="GeoJSON")
+        self.save_products_df_to_geojson()
 
-        log.debug(products)
+        log.debug(self.products_df)
+
+    def check_products_geojson_exists(self):
+        """
+        Stop execution if we don't have products geojson
+        :return:
+        """
+        if not os.path.exists(SENTINEL_PRODUCTS_GEOJSON):
+            sys.exit(
+                f"Unable to find file {SENTINEL_PRODUCTS_GEOJSON} - aborting. Please run script with download flag to generate this file"
+            )
 
     def process_products_for_farms(self, product: Series):
         """
@@ -464,7 +521,7 @@ class CropDataHandler:
                 [self.crop_raster_to_geometry(raster, farm_geometry, farm_name) for raster in original_rasters]
 
             else:
-                log.debug(f"Skipping as product {product['title']} as associated rasters not found")
+                log.debug(f"Skipping product {product['title']} as associated rasters not found")
 
         self.farm_bounds_32643.apply(_process_products_for_individual_farm, axis=1)
 
@@ -493,9 +550,19 @@ class CropDataHandler:
         :return:
         """
 
-        products = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
+        # open products so we have extra info
+        self.check_products_geojson_exists()
 
-        products = products.apply(self.process_products_for_farms, axis=1)
+        self.products_df = self.products_df.apply(self.process_products_for_farms, axis=1)
+
+        self.save_products_df_to_geojson()
+
+    def save_products_df_to_geojson(self):
+        """
+        Save products dataframe to filesystem as GEOJSON
+
+        """
+        self.products_df.to_file(SENTINEL_PRODUCTS_GEOJSON, driver="GeoJSON")
 
     def preview_farm_bands(self):
         """
@@ -504,12 +571,11 @@ class CropDataHandler:
 
         # Pick a farm
         farm_name = self.farm_bounds_32643.iloc[0]["name"]
-        products = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
-        first_product = products.iloc[0]
+        first_product = self.products_df.iloc[0]
 
         # Get all bands paths for this product
         band_paths = (
-            self.get_farm_raster_for_band(farm_name, first_product, band)
+            self.get_farm_raster_for_band(farm_name, first_product[band])
             for band in (BAND_2_10M, BAND_3_10M, BAND_4_10M, BAND_8_10M)
         )
 
@@ -534,12 +600,12 @@ class CropDataHandler:
         """
 
         farm_name = self.farm_bounds_32643.iloc[0]["name"]
-        products = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
-        first_product = products.iloc[0]
 
-        band2 = self.get_farm_raster_for_band(farm_name, first_product, BAND_2_10M)
-        band3 = self.get_farm_raster_for_band(farm_name, first_product, BAND_3_10M)
-        band4 = self.get_farm_raster_for_band(farm_name, first_product, BAND_4_10M)
+        first_product = self.products_df.iloc[0]
+
+        band2 = self.get_farm_raster_for_band(farm_name, first_product[BAND_2_10M])
+        band3 = self.get_farm_raster_for_band(farm_name, first_product[BAND_3_10M])
+        band4 = self.get_farm_raster_for_band(farm_name, first_product[BAND_4_10M])
 
         # export true color image
         output_raster = f"{Path(band2).parent}/rgb.tif"
@@ -568,29 +634,163 @@ class CropDataHandler:
         # with rasterio.open(output_raster, count=3) as src
         #     plot.show(src)
 
-    def get_farm_raster_for_band(self, farm_name: str, product: Series, band: str) -> str:
+    def generate_all_farms_bands_summary(self):
         """
-        Given a farm name and a product, return the path to the specified band
-        :param farm_name:
-        :param product:
+        For each farm, generate jpeg for each summary band showing how image changes for each product over time
+
+        """
+        [self.generate_all_farms_summary(band) for band in REPORT_SUMMARY_BANDS]
+
+    def generate_all_farms_summary(self, band: str, verify_images=False):
+        """
+        Generate plot for all farms for specified band over time
         :param band:
+        :param verify_images:
+        :return:
+        """
+        filtered_products_df = self.products_df[self.products_df[band].notnull()]
+
+        band_rasters = list(filter(None, map(self.get_all_farms_raster_for_band, filtered_products_df[band])))
+
+        if band_rasters:
+            number_of_raster = len(band_rasters)
+
+            cols = 6
+            rows = int(math.ceil(number_of_raster / cols))
+
+            gs = gridspec.GridSpec(rows, cols, wspace=0.01)
+
+            fig = plt.figure(figsize=(50, 50))
+            plt.tight_layout()
+
+            fig.suptitle(f"All farms {band}, all products", fontsize=40)
+
+            for n in range(number_of_raster):
+                ax = fig.add_subplot(gs[n])
+
+                product = filtered_products_df.iloc[n]
+
+                dt = parser.parse(product.generationdate)
+
+                ax.set_title(f"{product.title}:\n{dt.day}/{dt.month}/{dt.year}", fontsize=10, wrap=True)
+                # ax.set_title(f"{dt.day}/{dt.month}/{dt.year}\n{product.uuid}", fontsize=10)
+                ax.axes.xaxis.set_visible(False)
+                ax.axes.yaxis.set_visible(False)
+
+                with rasterio.open(band_rasters[n], "r") as src:
+                    # Overlay individual field bounds
+                    self.farm_bounds_32643.plot(ax=ax, facecolor="none", edgecolor="r")
+                    plot.show(src, ax=ax, cmap="terrain")
+                    # plt.tight_layout()
+
+                    if verify_images:
+
+                        # Show the field outlines on the raster
+                        fig, ax = plt.subplots(figsize=(15, 15))
+                        rasterio.plot.show(src, ax=ax)
+                        self.farm_bounds_32643.plot(ax=ax, facecolor="none", edgecolor="r")
+                        plt.show()
+
+            farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/all_farms"
+
+            os.makedirs(farm_name_dir, exist_ok=True)
+
+            plt.savefig(f"{farm_name_dir}/{band}.jpg", format="jpeg", bbox_inches="tight")
+
+    def generate_individual_farm_bands_summary(self):
+        """
+        For each farm, plot each of the summary bands in a jpeg over time
         :return:
         """
 
-        raster_path = product[band]
-        if raster_path:
-            # Original raster was .jp2, we converted to .tif
-            raster_file_path = Path(raster_path).with_suffix(".tif")
+        [
+            self.generate_individual_farm_band_summary(farm_index, band)
+            for farm_index in range(len(self.farm_bounds_32643))
+            for band in REPORT_SUMMARY_BANDS
+        ]
 
-            # Construct path to raster band that has been cropped for specified farm
-            raster_file_path = (
-                f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/{farm_name}/"
-                f"{raster_file_path.parent.name}/{raster_file_path.name}"
-            )
-            return raster_file_path
-        else:
-            log.debug(f"No band path found")
+    def generate_individual_farm_band_summary(self, farm_df_index: int, band: str, verify_images=False):
+        """
+        Plot how specified band changes over time for a farm
+        :param farm_df_index: Index of farm in farms dataframe
+        :param verify_images: Show the plot
+        :return:
+        """
+
+        # Get the farm
+        try:
+            farm_details = self.farm_bounds_32643.iloc[farm_df_index]
+        except IndexError as e:
+            log.error(e)
+            sys.exit("Farm index provided is out of range - exiting")
+
+        farm_name = farm_details["name"]
+
+        # If we have a situation where we've not yet downloaded all the products in the dataframe, we filter out those
+        # where we haven't got the desired band
+        filtered_products_df = self.products_df[self.products_df[band].notnull()]
+
+        band_rasters = [self.get_farm_raster_for_band(farm_name, band) for band in filtered_products_df[band]]
+
+        band_rasters = list(filter(None, band_rasters))
+
+        number_of_raster = len(band_rasters)
+
+        cols = 6
+        rows = int(math.ceil(number_of_raster / cols))
+
+        gs = gridspec.GridSpec(rows, cols, wspace=0.01)
+
+        fig = plt.figure(figsize=(24, 24))
+        fig.suptitle(f"Farm {farm_df_index}: {farm_name.capitalize()} {band}, all products", fontsize=40)
+
+        for n in range(number_of_raster):
+            ax = fig.add_subplot(gs[n])
+
+            product = filtered_products_df.iloc[n]
+
+            dt = parser.parse(product.generationdate)
+
+            # ax.set_title(f"{product.title}:\n{dt.day}/{dt.month}/{dt.year}", fontsize = 10, wrap=True )
+            ax.set_title(f"{dt.day}/{dt.month}/{dt.year}\n{product.uuid}", fontsize=10)
+            ax.axes.xaxis.set_visible(False)
+            ax.axes.yaxis.set_visible(False)
+            with rasterio.open(band_rasters[n], "r") as src:
+                plot.show(src, ax=ax, cmap="terrain")
+
+        farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/{farm_name}"
+
+        os.makedirs(farm_name_dir, exist_ok=True)
+        plt.savefig(f"{farm_name_dir}/{band}.jpg")
+
+        if verify_images:
+            plt.show()
+
+    def get_all_farms_raster_for_band(self, raster_path):
+        if not os.path.exists(raster_path):
             return None
+
+        raster_file_path = Path(raster_path).with_suffix(".tif")
+        raster_file_path = f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/all_farms/{raster_file_path.parent.name}/{raster_file_path.name}"
+        return raster_file_path
+
+    def get_farm_raster_for_band(self, farm_name: str, raster_path: str) -> str:
+        """
+        Given a farm name and a band path from an original product, construct a path to the farm raster for this band
+        :param farm_name:
+        :param raster_path:
+        :return:
+        """
+        if not os.path.exists(raster_path):
+            return None
+
+        raster_file_path = Path(raster_path).with_suffix(".tif")
+        # Construct path to raster band that has been cropped for specified farm
+        raster_file_path = (
+            f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/{farm_name}/"
+            f"{raster_file_path.parent.name}/{raster_file_path.name}"
+        )
+        return raster_file_path
 
 
 @click.command(context_settings=dict(ignore_unknown_options=True))
@@ -598,6 +798,13 @@ class CropDataHandler:
 @click.option("--crop-all", "-ca", is_flag=True, help="Crop Sentintel 2 rasters to bounds of all farms")
 @click.option(
     "--crop-individual-farms", "-ci", is_flag=True, help="Crop Sentintel 2 rasters individual farm boundaries"
+)
+@click.option("--farm_summaries", "-fs", is_flag=True, help="Generate summary jpegs for specified bands over time")
+@click.option(
+    "--farm_summaries_all",
+    "-fsa",
+    is_flag=True,
+    help="Generate summary jpegs for the bbox of all farms for specified bands",
 )
 @click.option(
     "--sentinel_date_range",
@@ -607,13 +814,14 @@ class CropDataHandler:
     help='Specify the date window to get sentinel data. Default is ("20210401", "20220401").'
     " Has to be combined with -d flag to start download",
 )
-def main(download, crop_all, crop_individual_farms, sentinel_date_range):
+def main(download, crop_all, crop_individual_farms, sentinel_date_range, farm_summaries, farm_summaries_all):
     """
     Download and process Sentinel 2 rasters.
 
     If you wish to download (-d), please ensure you set "SENTINEL_USER" and "SENTINEL_PASSWORD"
     environment variables. An account can be created at https://scihub.copernicus.eu/dhus/#/self-registration
 
+    :param farm_summaries:
     :param crop_individual_farms:
     :param crop_all:
     :param download:
@@ -623,13 +831,18 @@ def main(download, crop_all, crop_individual_farms, sentinel_date_range):
 
     if download:
         crop_data_handler.download_sentinel_products()
-        crop_data_handler.unzip_sentinel_products()
 
     if crop_all:
         crop_data_handler.crop_rasters_to_all_fields_bbox()
 
     if crop_individual_farms:
         crop_data_handler.crop_rasters_to_individual_fields_bbox()
+
+    if farm_summaries:
+        crop_data_handler.generate_individual_farm_bands_summary()
+
+    if farm_summaries_all:
+        crop_data_handler.generate_all_farms_bands_summary()
 
     # crop_data_handler.create_cropped_rgb_image()
     # crop_data_handler.preview_farm_bands()
