@@ -54,6 +54,7 @@ BAND_TCI_20M = "TCI_20m"
 BAND_01_60M = "B01_60m"
 BAND_09_60M = "B09_60m"
 BAND_10_60M = "B10_60m"  # https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/processing-levels/level-2 (the cirrus band 10 is omitted, as it does not contain surface information)
+BAND_SCL_60M = "SCL_60m"
 
 ALL_BANDS = (
     BAND_2_10M,
@@ -72,9 +73,10 @@ ALL_BANDS = (
     BAND_TCI_10M,
     BAND_SCL_20M,
     BAND_TCI_20M,
+    BAND_SCL_60M
 )
 
-REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M
+REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M, BAND_SCL_60M
 
 log = logging.getLogger(__name__)
 DATA_DIRECTORY = "data"
@@ -323,7 +325,7 @@ class CropDataHandler:
         """
         self.get_available_sentinel_products_df()
 
-        # self.download_sentinel_product_files()
+        self.download_sentinel_product_files()
 
         self.unzip_sentinel_products()
 
