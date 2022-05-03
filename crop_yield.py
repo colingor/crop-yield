@@ -49,6 +49,7 @@ BAND_8A_20M = "B8A_20m"
 BAND_11_20M = "B11_20m"
 BAND_12_20M = "B12_20m"
 BAND_SCL_20M = "SCL_20m"
+BAND_TCI_20M = "TCI_20m"
 
 BAND_01_60M = "B01_60m"
 BAND_09_60M = "B09_60m"
@@ -70,13 +71,15 @@ ALL_BANDS = (
     BAND_10_60M,
     BAND_TCI_10M,
     BAND_SCL_20M,
+    BAND_TCI_20M,
 )
+
+REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M
 
 log = logging.getLogger(__name__)
 DATA_DIRECTORY = "data"
 FARM_SENTINEL_DATA_DIRECTORY = f"{DATA_DIRECTORY}/sentinel2"
 FARM_SUMMARIES_DIRECTORY = f"{FARM_SENTINEL_DATA_DIRECTORY}/farm_summaries"
-RGB_FARM_SUMMARIES_DIRECTORY = f"{FARM_SUMMARIES_DIRECTORY}/rgb"
 FARM_LOCATIONS_DIRECTORY = f"{DATA_DIRECTORY}/farm_locations"
 FARMS_KMZ = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.kmz"
 FARMS_KML = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.kml"
@@ -117,7 +120,7 @@ class CropDataHandler:
 
         # Ensure directory to store Sentinel2 data exists
         os.makedirs(FARM_SENTINEL_DATA_DIRECTORY, exist_ok=True)
-        os.makedirs(RGB_FARM_SUMMARIES_DIRECTORY, exist_ok=True)
+        os.makedirs(FARM_SUMMARIES_DIRECTORY, exist_ok=True)
 
         # Create api instance
         self.configure_api()
@@ -631,19 +634,84 @@ class CropDataHandler:
         # with rasterio.open(output_raster, count=3) as src
         #     plot.show(src)
 
-    def generate_all_farms_rgb_series_over_time(self):
+    def generate_all_farms_bands_summary(self):
         """
-        Generate summary RGB images for all farms
+        For each farm, generate jpeg for each summary band showing how image changes for each product over time
+
+        """
+        [self.generate_all_farms_summary(band) for band in REPORT_SUMMARY_BANDS]
+
+    def generate_all_farms_summary(self, band: str, verify_images=False):
+        """
+        Generate plot for all farms for specified band over time
+        :param band:
+        :param verify_images:
         :return:
         """
+        filtered_products_df = self.products_df[self.products_df[band].notnull()]
+
+        band_rasters = list(filter(None, map(self.get_all_farms_raster_for_band, filtered_products_df[band])))
+
+        if band_rasters:
+            number_of_raster = len(band_rasters)
+
+            cols = 6
+            rows = int(math.ceil(number_of_raster / cols))
+
+            gs = gridspec.GridSpec(rows, cols, wspace=0.01)
+
+            fig = plt.figure(figsize=(50, 50))
+            plt.tight_layout()
+
+            fig.suptitle(f"All farms {band}, all products", fontsize=40)
+
+            for n in range(number_of_raster):
+                ax = fig.add_subplot(gs[n])
+
+                product = filtered_products_df.iloc[n]
+
+                dt = parser.parse(product.generationdate)
+
+                ax.set_title(f"{product.title}:\n{dt.day}/{dt.month}/{dt.year}", fontsize=10, wrap=True)
+                # ax.set_title(f"{dt.day}/{dt.month}/{dt.year}\n{product.uuid}", fontsize=10)
+                ax.axes.xaxis.set_visible(False)
+                ax.axes.yaxis.set_visible(False)
+
+                with rasterio.open(band_rasters[n], "r") as src:
+                    # Overlay individual field bounds
+                    self.farm_bounds_32643.plot(ax=ax, facecolor="none", edgecolor="r")
+                    plot.show(src, ax=ax, cmap="terrain")
+                    # plt.tight_layout()
+
+                    if verify_images:
+
+                        # Show the field outlines on the raster
+                        fig, ax = plt.subplots(figsize=(15, 15))
+                        rasterio.plot.show(src, ax=ax)
+                        self.farm_bounds_32643.plot(ax=ax, facecolor="none", edgecolor="r")
+                        plt.show()
+
+            farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/all_farms"
+
+            os.makedirs(farm_name_dir, exist_ok=True)
+
+            plt.savefig(f"{farm_name_dir}/{band}.jpg", format="jpeg", bbox_inches="tight")
+
+    def generate_individual_farm_bands_summary(self):
+        """
+        For each farm, plot each of the summary bands in a jpeg over time
+        :return:
+        """
+
         [
-            self.generate_individual_farm_rgb_series_over_time(farm_index)
+            self.generate_individual_farm_band_summary(farm_index, band)
             for farm_index in range(len(self.farm_bounds_32643))
+            for band in REPORT_SUMMARY_BANDS
         ]
 
-    def generate_individual_farm_rgb_series_over_time(self, farm_df_index: int, verify_images=False):
+    def generate_individual_farm_band_summary(self, farm_df_index: int, band: str, verify_images=False):
         """
-        Generate composite plot of farm true colour (RGB) images for each product
+        Plot how specified band changes over time for a farm
         :param farm_df_index: Index of farm in farms dataframe
         :param verify_images: Show the plot
         :return:
@@ -660,27 +728,21 @@ class CropDataHandler:
 
         # If we have a situation where we've not yet downloaded all the products in the dataframe, we filter out those
         # where we haven't got the desired band
-        # filtered_products_df = self.products_df[self.products_df[BAND_TCI_10M].notnull()]
-        filtered_products_df = self.products_df[self.products_df[BAND_SCL_20M].notnull()]
+        filtered_products_df = self.products_df[self.products_df[band].notnull()]
 
-        true_colour_rasters = [
-            self.get_farm_raster_for_band(farm_name, band) for band in filtered_products_df[BAND_TCI_10M]
-        ]
-        # cloud_cover_rasters = [
-        #     self.get_farm_raster_for_band(farm_name, band) for band in filtered_products_df[BAND_SCL_20M]
-        # ]
+        band_rasters = [self.get_farm_raster_for_band(farm_name, band) for band in filtered_products_df[band]]
 
-        true_colour_rasters = list(filter(None, true_colour_rasters))
+        band_rasters = list(filter(None, band_rasters))
 
-        number_of_raster = len(true_colour_rasters)
+        number_of_raster = len(band_rasters)
 
-        cols = 7
+        cols = 6
         rows = int(math.ceil(number_of_raster / cols))
 
         gs = gridspec.GridSpec(rows, cols, wspace=0.01)
 
         fig = plt.figure(figsize=(24, 24))
-        fig.suptitle(f"Farm {farm_df_index}: {farm_name.capitalize()} true colour images, all products", fontsize=40)
+        fig.suptitle(f"Farm {farm_df_index}: {farm_name.capitalize()} {band}, all products", fontsize=40)
 
         for n in range(number_of_raster):
             ax = fig.add_subplot(gs[n])
@@ -690,18 +752,27 @@ class CropDataHandler:
             dt = parser.parse(product.generationdate)
 
             # ax.set_title(f"{product.title}:\n{dt.day}/{dt.month}/{dt.year}", fontsize = 10, wrap=True )
-            ax.set_title(f"{dt.day}/{dt.month}/{dt.year}", fontsize=10)
-
+            ax.set_title(f"{dt.day}/{dt.month}/{dt.year}\n{product.uuid}", fontsize=10)
             ax.axes.xaxis.set_visible(False)
             ax.axes.yaxis.set_visible(False)
-
-            with rasterio.open(true_colour_rasters[n], "r") as src:
+            with rasterio.open(band_rasters[n], "r") as src:
                 plot.show(src, ax=ax, cmap="terrain")
 
-        plt.savefig(f"{RGB_FARM_SUMMARIES_DIRECTORY}/{farm_name}.jpg")
+        farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/{farm_name}"
+
+        os.makedirs(farm_name_dir, exist_ok=True)
+        plt.savefig(f"{farm_name_dir}/{band}.jpg")
 
         if verify_images:
             plt.show()
+
+    def get_all_farms_raster_for_band(self, raster_path):
+        if not os.path.exists(raster_path):
+            return None
+
+        raster_file_path = Path(raster_path).with_suffix(".tif")
+        raster_file_path = f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/all_farms/{raster_file_path.parent.name}/{raster_file_path.name}"
+        return raster_file_path
 
     def get_farm_raster_for_band(self, farm_name: str, raster_path: str) -> str:
         """
@@ -728,7 +799,13 @@ class CropDataHandler:
 @click.option(
     "--crop-individual-farms", "-ci", is_flag=True, help="Crop Sentintel 2 rasters individual farm boundaries"
 )
-@click.option("--colour-summary", "-cs", is_flag=True, help="Generate RGB True Colour summary images for each farm")
+@click.option("--farm_summaries", "-fs", is_flag=True, help="Generate summary jpegs for specified bands over time")
+@click.option(
+    "--farm_summaries_all",
+    "-fsa",
+    is_flag=True,
+    help="Generate summary jpegs for the bbox of all farms for specified bands",
+)
 @click.option(
     "--sentinel_date_range",
     required=True,
@@ -737,13 +814,14 @@ class CropDataHandler:
     help='Specify the date window to get sentinel data. Default is ("20210401", "20220401").'
     " Has to be combined with -d flag to start download",
 )
-def main(download, crop_all, crop_individual_farms, sentinel_date_range, colour_summary):
+def main(download, crop_all, crop_individual_farms, sentinel_date_range, farm_summaries, farm_summaries_all):
     """
     Download and process Sentinel 2 rasters.
 
     If you wish to download (-d), please ensure you set "SENTINEL_USER" and "SENTINEL_PASSWORD"
     environment variables. An account can be created at https://scihub.copernicus.eu/dhus/#/self-registration
 
+    :param farm_summaries:
     :param crop_individual_farms:
     :param crop_all:
     :param download:
@@ -760,8 +838,11 @@ def main(download, crop_all, crop_individual_farms, sentinel_date_range, colour_
     if crop_individual_farms:
         crop_data_handler.crop_rasters_to_individual_fields_bbox()
 
-    if colour_summary:
-        crop_data_handler.generate_all_farms_rgb_series_over_time()
+    if farm_summaries:
+        crop_data_handler.generate_individual_farm_bands_summary()
+
+    if farm_summaries_all:
+        crop_data_handler.generate_all_farms_bands_summary()
 
     # crop_data_handler.create_cropped_rgb_image()
     # crop_data_handler.preview_farm_bands()
