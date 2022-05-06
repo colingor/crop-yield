@@ -18,7 +18,6 @@ import kml2geojson
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import rasterio
 import shapely
 from dateutil import parser
@@ -28,9 +27,10 @@ from matplotlib import gridspec
 from pandas import Series
 from rasterio import plot
 from rasterio.mask import mask
-from rasterio.plot import show
+from rasterio.plot import show, show_hist
 from sentinelsat.sentinel import SentinelAPI
 from shapely.geometry import Polygon, MultiPolygon
+import pandas as pd
 
 pd.set_option("display.max_columns", None)  # or 1000
 pd.set_option("display.max_rows", None)  # or 1000
@@ -73,20 +73,30 @@ ALL_BANDS = (
     BAND_TCI_10M,
     BAND_SCL_20M,
     BAND_TCI_20M,
-    BAND_SCL_60M
+    BAND_SCL_60M,
 )
 
-REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M, BAND_SCL_60M
+# REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M, BAND_SCL_60M
+REPORT_SUMMARY_BANDS = ALL_BANDS
 
 log = logging.getLogger(__name__)
 DATA_DIRECTORY = "data"
+ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX = "all_farms_27_03_22"
 FARM_SENTINEL_DATA_DIRECTORY = f"{DATA_DIRECTORY}/sentinel2"
 FARM_SUMMARIES_DIRECTORY = f"{FARM_SENTINEL_DATA_DIRECTORY}/farm_summaries"
 FARM_LOCATIONS_DIRECTORY = f"{DATA_DIRECTORY}/farm_locations"
-FARMS_KMZ = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.kmz"
-FARMS_KML = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.kml"
-FARMS_GEOJSON = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_27_03_22.geojson"
+FARMS_KMZ = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.kmz"
+FARMS_KML = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.kml"
+FARMS_GEOJSON = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.geojson"
 SENTINEL_PRODUCTS_GEOJSON = f"{FARM_SENTINEL_DATA_DIRECTORY}/products.geojson"
+FARMS_GEOJSON_VALID_PRODUCTS = (
+    f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}_cloud_free_products.geojson"
+)
+
+# Scene classification keys
+CLOUD_MEDIUM = 8
+CLOUD_HIGH = 9
+THIN_CIRRUS = 10
 
 # Create logs dir if it doesn't already exist
 os.makedirs("logs", exist_ok=True)
@@ -135,35 +145,44 @@ class CropDataHandler:
         """
         Unzip the kmz and derive shapefiles, geojson and cache farm bounds and total bounding box
         """
-        kmz = ZipFile(FARMS_KMZ, "r")
-        log.debug("Unzipped kmz")
-        kml = kmz.open("doc.kml", "r").read()
-        with open(FARMS_KML, "wb") as f:
-            f.write(kml)
 
-        farms_geojson = kml2geojson.main.convert(FARMS_KML)[0]
+        if os.path.exists(FARMS_GEOJSON_VALID_PRODUCTS):
+            self.farm_bounds_32643 = gpd.read_file(FARMS_GEOJSON_VALID_PRODUCTS)
+            # Hack to convert string to list and Fiona won't serialize list
+            self.farm_bounds_32643["cloud_free_products"] = self.farm_bounds_32643["cloud_free_products"].apply(
+                lambda x: x.split()
+            )
+            self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
+        else:
+            kmz = ZipFile(FARMS_KMZ, "r")
+            log.debug("Unzipped kmz")
+            kml = kmz.open("doc.kml", "r").read()
+            with open(FARMS_KML, "wb") as f:
+                f.write(kml)
 
-        with open(FARMS_GEOJSON, "w") as f:
-            geojson.dump(farms_geojson, f)
+            farms_geojson = kml2geojson.main.convert(FARMS_KML)[0]
 
-        # Save as shapefile in desired projection
-        farm_bounds = gpd.read_file(FARMS_GEOJSON)
-        self.farm_bounds_32643 = farm_bounds.to_crs({"init": "epsg:32643"})
-        self.farm_bounds_32643.to_file(f"{FARM_LOCATIONS_DIRECTORY}/individual_farm_bounds.shp")
+            with open(FARMS_GEOJSON, "w") as f:
+                geojson.dump(farms_geojson, f)
 
-        # Plot the bounds of the fields (not coloured in)
-        # self.farm_bounds_32643.boundary.plot()
-        # plt.show()
+            # Save as shapefile in desired projection
+            farm_bounds = gpd.read_file(FARMS_GEOJSON)
+            self.farm_bounds_32643 = farm_bounds.to_crs({"init": "epsg:32643"})
+            self.farm_bounds_32643.to_file(f"{FARM_LOCATIONS_DIRECTORY}/individual_farm_bounds.shp")
 
-        # Save overall bounding box in desired projection
-        self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
+            # Plot the bounds of the fields (not coloured in)
+            # self.farm_bounds_32643.boundary.plot()
+            # plt.show()
 
-        self.total_bbox = gpd.GeoDataFrame({"geometry": self.total_bbox_32643}, index=[0], crs=from_epsg(32643))
-        self.total_bbox.to_file(f"{FARM_LOCATIONS_DIRECTORY}/total_bounds.shp")
+            # Save overall bounding box in desired projection
+            self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
 
-        # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
-        # It seems rasterio won't work with 3D geometry
-        self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
+            self.total_bbox = gpd.GeoDataFrame({"geometry": self.total_bbox_32643}, index=[0], crs=from_epsg(32643))
+            self.total_bbox.to_file(f"{FARM_LOCATIONS_DIRECTORY}/total_bounds.shp")
+
+            # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
+            # It seems rasterio won't work with 3D geometry
+            self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
 
         if os.path.exists(SENTINEL_PRODUCTS_GEOJSON):
             self.products_df = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
@@ -596,7 +615,7 @@ class CropDataHandler:
 
         # Get all bands paths for this product
         band_paths = (
-            self.get_farm_raster_for_band(farm_name, first_product[band])
+            self.get_farm_raster_from_product_raster_path(farm_name, first_product[band])
             for band in (BAND_2_10M, BAND_3_10M, BAND_4_10M, BAND_8_10M)
         )
 
@@ -624,9 +643,9 @@ class CropDataHandler:
 
         first_product = self.products_df.iloc[0]
 
-        band2 = self.get_farm_raster_for_band(farm_name, first_product[BAND_2_10M])
-        band3 = self.get_farm_raster_for_band(farm_name, first_product[BAND_3_10M])
-        band4 = self.get_farm_raster_for_band(farm_name, first_product[BAND_4_10M])
+        band2 = self.get_farm_raster_from_product_raster_path(farm_name, first_product[BAND_2_10M])
+        band3 = self.get_farm_raster_from_product_raster_path(farm_name, first_product[BAND_3_10M])
+        band4 = self.get_farm_raster_from_product_raster_path(farm_name, first_product[BAND_4_10M])
 
         # export true color image
         output_raster = f"{Path(band2).parent}/rgb.tif"
@@ -718,21 +737,157 @@ class CropDataHandler:
 
             plt.savefig(f"{farm_name_dir}/{band}.jpg", format="jpeg", bbox_inches="tight")
 
-    def generate_individual_farm_bands_summary(self):
+    def generate_individual_farm_bands_summary(self, filter_clouds=True):
         """
         For each farm, plot each of the summary bands in a jpeg over time
+        :param filter_clouds: Whether to exclude farm rasters that have clouds
         :return:
         """
 
         [
-            self.generate_individual_farm_band_summary(farm_index, band)
+            self.generate_individual_farm_band_summary(
+                farm_index, band, verify_images=False, filter_clouds=filter_clouds
+            )
             for farm_index in range(len(self.farm_bounds_32643))
             for band in REPORT_SUMMARY_BANDS
         ]
 
-    def generate_individual_farm_band_summary(self, farm_df_index: int, band: str, verify_images=False):
+    def generate_individual_farm_band_summary(
+        self, farm_df_index: int, band: str, verify_images=False, filter_clouds=True
+    ):
         """
-        Plot how specified band changes over time for a farm
+        Plot how specified band_to_display changes over time for a farm
+        :param filter_clouds: Filter out images that Scene Classification deemed to have clouds
+        :param band: Band you wish to display
+        :param farm_df_index: Index of farm in farms dataframe
+        :param verify_images: Show the plot
+        :return:
+        """
+
+        # Get the farm
+        try:
+            farm_details = self.farm_bounds_32643.iloc[farm_df_index]
+        except IndexError as e:
+            log.error(e)
+            sys.exit("Farm index provided is out of range - exiting")
+
+        farm_name = farm_details["name"]
+
+        if filter_clouds:
+            cloud_free_products = farm_details["cloud_free_products"]
+
+            # Only want products that are cloud free for specified farm. Copy, filter and reset index
+            filtered_products_df = self.products_df.query("uuid in @cloud_free_products").copy()
+            filtered_products_df = filtered_products_df[filtered_products_df[band].notnull()]
+        else:
+            filtered_products_df = self.products_df[self.products_df[band].notnull()]
+
+        filtered_products_df.reset_index(inplace=True)
+
+        # filtered_products_df[band] = filtered_products_df[band].map(lambda x: self.get_farm_raster_from_product_raster_path(farm_name, x))
+
+        # band_rasters = list(
+        #     filter(None, [self.get_farm_raster_from_product_raster_path(farm_name, band) for band in filtered_products_df[band]])
+        # )
+
+        # number_of_raster = len(band_rasters)
+        number_of_raster = len(filtered_products_df)
+
+        cols = 6
+        rows = int(math.ceil(number_of_raster / cols))
+
+        gs = gridspec.GridSpec(rows, cols, wspace=0.01)
+
+        fig = plt.figure(figsize=(24, 24))
+        fig.suptitle(f"Farm {farm_df_index}: {farm_name.capitalize()} {band}, all products", fontsize=40)
+
+        def _add_band_image_to_grid(product, band_to_display, farm_name):
+            index = product.name
+            ax = fig.add_subplot(gs[index])
+
+            dt = parser.parse(product.generationdate)
+
+            # ax.set_title(f"{product.title}:\n{dt.day}/{dt.month}/{dt.year}", fontsize = 10, wrap=True )
+            ax.set_title(f"{dt.day}/{dt.month}/{dt.year}\n{product.uuid}", fontsize=10)
+            ax.axes.xaxis.set_visible(False)
+            ax.axes.yaxis.set_visible(False)
+            band_raster = self.get_farm_raster_from_product_raster_path(farm_name, product[band_to_display])
+            if band_raster:
+                with rasterio.open(band_raster, "r") as src:
+                    plot.show(src, ax=ax, cmap="terrain")
+            return product
+
+        filtered_products_df.apply(_add_band_image_to_grid, band_to_display=band, farm_name=farm_name, axis=1)
+
+        farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/{farm_name}"
+
+        os.makedirs(farm_name_dir, exist_ok=True)
+
+        if filter_clouds:
+            plt.savefig(f"{farm_name_dir}/{band}.jpg")
+        else:
+            plt.savefig(f"{farm_name_dir}/{band}_including_clouds.jpg")
+        if verify_images:
+            plt.show()
+
+    def set_cloud_free_products(self, farm: Series) -> Series:
+        """
+        Check the scene classification raster for each product for this farm
+        :param farm:
+        :return: farm
+        """
+
+        cloud_free_product_ids = []
+
+        def _check_cloud_cover_for_farm_product(uuid: str, default_scene_classification_path: str):
+            """
+            Get the scene classification raster for the specified farm.
+            If it contains any pixels classed as cloud, we ignore it. If not we add it to a valid list of
+            product uuids. See https://custom-scripts.sentinel-hub.com/custom-scripts/sentinel-2/scene-classification/#
+            :param uuid:
+            :param default_scene_classification_path:
+
+            """
+            scene_classification_raster = self.get_farm_raster_from_product_raster_path(
+                farm["name"], default_scene_classification_path
+            )
+            if scene_classification_raster:
+                with rasterio.open(scene_classification_raster, "r") as src:
+                    if not any(np.in1d((CLOUD_MEDIUM, CLOUD_HIGH, THIN_CIRRUS), src.read())):
+                        cloud_free_product_ids.append(uuid)
+
+        [
+            _check_cloud_cover_for_farm_product(uuid, default_scene_classification_20m_path)
+            for uuid, default_scene_classification_20m_path in zip(
+                self.products_df["uuid"], self.products_df[BAND_SCL_20M]
+            )
+        ]
+
+        farm["cloud_free_products"] = cloud_free_product_ids
+        return farm
+
+    def add_cloud_free_products_to_farms_df(self):
+
+        if not os.path.exists(FARMS_GEOJSON_VALID_PRODUCTS):
+            self.farm_bounds_32643 = self.farm_bounds_32643.apply(self.set_cloud_free_products, axis=1)
+
+            # Hack here to convert list to string as bug in Fiona won't serialise this
+            self.farm_bounds_32643["cloud_free_products"] = self.farm_bounds_32643["cloud_free_products"].apply(
+                lambda x: " ".join(x)
+            )
+            self.farm_bounds_32643.to_file(FARMS_GEOJSON_VALID_PRODUCTS, driver="GeoJSON")
+        else:
+
+            self.farm_bounds_32643 = gpd.read_file(FARMS_GEOJSON_VALID_PRODUCTS)
+
+        # Convert back to list
+        self.farm_bounds_32643["cloud_free_products"] = self.farm_bounds_32643["cloud_free_products"].apply(
+            lambda x: x.split()
+        )
+
+    def generate_individual_farm_cloud_series_over_time(self, farm_df_index: int, verify_images=False):
+        """
+        Generate composite plot of farm true colour (RGB) images for each product
         :param farm_df_index: Index of farm in farms dataframe
         :param verify_images: Show the plot
         :return:
@@ -749,40 +904,99 @@ class CropDataHandler:
 
         # If we have a situation where we've not yet downloaded all the products in the dataframe, we filter out those
         # where we haven't got the desired band
-        filtered_products_df = self.products_df[self.products_df[band].notnull()]
+        # filtered_products_df = self.products_df[self.products_df[BAND_TCI_10M].notnull()]
+        filtered_products_df = self.products_df[self.products_df[BAND_SCL_20M].notnull()]
 
-        band_rasters = [self.get_farm_raster_for_band(farm_name, band) for band in filtered_products_df[band]]
+        true_colour_rasters = [
+            self.get_farm_raster_from_product_raster_path(farm_name, band)
+            for band in filtered_products_df[BAND_TCI_10M]
+        ]
+        scene_classification_rasters = [
+            self.get_farm_raster_from_product_raster_path(farm_name, band)
+            for band in filtered_products_df[BAND_SCL_20M]
+        ]
 
-        band_rasters = list(filter(None, band_rasters))
+        true_colour_rasters = list(filter(None, true_colour_rasters))
 
-        number_of_raster = len(band_rasters)
+        number_of_raster = len(true_colour_rasters)
 
-        cols = 6
+        cols = 4
         rows = int(math.ceil(number_of_raster / cols))
 
-        gs = gridspec.GridSpec(rows, cols, wspace=0.01)
+        # gs = gridspec.GridSpec(rows, cols, wspace=0.01)
 
         fig = plt.figure(figsize=(24, 24))
-        fig.suptitle(f"Farm {farm_df_index}: {farm_name.capitalize()} {band}, all products", fontsize=40)
+        # gs = gridspec.GridSpec(rows, cols, wspace=0.01,figure=fig)
+        gs = gridspec.GridSpec(rows, cols, wspace=1, figure=fig)
+        # gridspec.GridSpec(1, 2, figure=fig)
+        fig.suptitle(f"Farm {farm_df_index}: {farm_name.capitalize()} true colour images, all products", fontsize=40)
 
         for n in range(number_of_raster):
-            ax = fig.add_subplot(gs[n])
 
+            gs1 = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[n])
+
+            ax = fig.add_subplot(gs1[0])
+            ax.axes.xaxis.set_visible(False)
+            ax.axes.yaxis.set_visible(False)
             product = filtered_products_df.iloc[n]
 
             dt = parser.parse(product.generationdate)
 
-            # ax.set_title(f"{product.title}:\n{dt.day}/{dt.month}/{dt.year}", fontsize = 10, wrap=True )
-            ax.set_title(f"{dt.day}/{dt.month}/{dt.year}\n{product.uuid}", fontsize=10)
-            ax.axes.xaxis.set_visible(False)
-            ax.axes.yaxis.set_visible(False)
-            with rasterio.open(band_rasters[n], "r") as src:
+            ax.set_title(f"{dt.day}/{dt.month}/{dt.year}", fontsize=10)
+            with rasterio.open(true_colour_rasters[n], "r") as src:
                 plot.show(src, ax=ax, cmap="terrain")
 
-        farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/{farm_name}"
+            ax2 = fig.add_subplot(gs1[1])
+            ax2.axes.xaxis.set_visible(False)
+            ax2.axes.yaxis.set_visible(False)
+            ax2.set_title(f"Clear {dt.day}/{dt.month}/{dt.year}")
+            with rasterio.open(scene_classification_rasters[n], "r") as src:
 
-        os.makedirs(farm_name_dir, exist_ok=True)
-        plt.savefig(f"{farm_name_dir}/{band}.jpg")
+                data = src.read()
+
+                if any(np.in1d((CLOUD_MEDIUM, CLOUD_HIGH, THIN_CIRRUS), data)):
+                    log.debug("Raster data contains clouds")
+                    ax2.set_title(f"*******CLOUD ALERT ******")
+                plot.show(src, ax=ax2, cmap="terrain")
+                # fig, ax = plt.subplots(figsize=(15, 15))
+                # plot.show(src, ax=ax)
+                # show_hist(
+                #     src, bins=50, lw=0.0, stacked=False, alpha=0.3,
+                #     histtype='stepfilled', title="Histogram")
+                # show_hist(src, bins=50, histtype='stepfilled',
+                #                   lw=0.0, stacked=False, alpha=0.3, ax=ax)
+                # plt.show()
+                # plot.show(src, ax=ax2, cmap="terrain")
+
+            # gs2 = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0])
+            # fig2 = plt.figure()
+
+            # ax = fig.add_subplot(gs2[0])
+            #
+            # product = filtered_products_df.iloc[n]
+            #
+            # dt = parser.parse(product.generationdate)
+            #
+            # # ax.set_title(f"{product.title}:\n{dt.day}/{dt.month}/{dt.year}", fontsize = 10, wrap=True )
+            # ax.set_title(f"{dt.day}/{dt.month}/{dt.year}", fontsize=10)
+            #
+            # ax.axes.xaxis.set_visible(False)
+            # ax.axes.yaxis.set_visible(False)
+            #
+            # with rasterio.open(true_colour_rasters[n], "r") as src:
+            #     plot.show(src, ax=ax, cmap="terrain")
+            # with rasterio.open(true_colour_rasters[n], "r") as src:
+            #     ax = fig.add_subplot(gs2[1])
+
+            # ax.set_title("cloud", fontsize=10)
+            #
+            # ax.axes.xaxis.set_visible(False)
+            # ax.axes.yaxis.set_visible(False)
+            # plot.show(src, ax=ax, cmap="terrain")
+
+            # fig.add_subplot(gs[n])
+
+        # plt.savefig(f"{FARM_SUMMARIES_DIRECTORY}/{farm_name}.jpg")
 
         if verify_images:
             plt.show()
@@ -795,13 +1009,16 @@ class CropDataHandler:
         raster_file_path = f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/all_farms/{raster_file_path.parent.name}/{raster_file_path.name}"
         return raster_file_path
 
-    def get_farm_raster_for_band(self, farm_name: str, raster_path: str) -> str:
+    def get_farm_raster_from_product_raster_path(self, farm_name: str, raster_path: str) -> str:
         """
         Given a farm name and a band path from an original product, construct a path to the farm raster for this band
         :param farm_name:
         :param raster_path:
         :return:
         """
+        if not raster_path:
+            return None
+
         if not os.path.exists(raster_path):
             return None
 
@@ -858,13 +1075,16 @@ def main(download, crop_all, crop_individual_farms, sentinel_date_range, farm_su
 
     if crop_individual_farms:
         crop_data_handler.crop_rasters_to_individual_fields_bbox()
+        crop_data_handler.add_cloud_free_products_to_farms_df()
 
     if farm_summaries:
-        crop_data_handler.generate_individual_farm_bands_summary()
+        crop_data_handler.generate_individual_farm_bands_summary(filter_clouds=True)
 
     if farm_summaries_all:
         crop_data_handler.generate_all_farms_bands_summary()
 
+    # crop_data_handler.generate_individual_farm_cloud_series_over_time(0, True)
+    # crop_data_handler.add_cloud_free_products_to_farms_df()
     # crop_data_handler.create_cropped_rgb_image()
     # crop_data_handler.preview_farm_bands()
 
