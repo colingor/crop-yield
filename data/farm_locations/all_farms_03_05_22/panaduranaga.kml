@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>panaduranaga.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>panaduranaga</name>
+		<visibility>0</visibility>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.71869371086359,15.26731627352296,0 76.71866688877344,15.26715940337185,0 76.71865314245224,15.26673730887802,0 76.71867962926626,15.26655812061403,0 76.71892739832401,15.2665332153739,0 76.71912722289562,15.26653709671022,0 76.71924222260714,15.26646658575591,0 76.71940449625254,15.26650669290714,0 76.71950340270996,15.26644362117393,0 76.71961806714535,15.26646852642469,0 76.71968948096037,15.26644168050491,0 76.71994529664518,15.26643585849777,0 76.71999122947454,15.26662701431485,0 76.7199831828475,15.26679682263582,0 76.71999122947454,15.2669459304006,0 76.71996742486952,15.2670908332896,0 76.71991411596537,15.26720921370059,0 76.7199694365263,15.2672855463892,0 76.71999994665384,15.26737546367323,0 76.7198534309864,15.26733341602722,0 76.71976424753666,15.26734473654813,0 76.719667352736,15.26738872485215,0 76.71953458338976,15.26735993838954,0 76.71940013766289,15.26731627352296,0 76.7192854732275,15.26730462955703,0 76.71918254345655,15.26735799772898,0 76.71903401613235,15.26733147536643,0 76.71894684433937,15.2673275940448,0 76.71869371086359,15.26731627352296,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>marepa.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>marepa</name>
+		<visibility>0</visibility>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.72573115676641,15.27096403750149,0 76.72573886811733,15.27192238171685,0 76.72570466995239,15.2722694286776,0 76.72577943652868,15.27249130555769,0 76.72520276159048,15.27237292812608,0 76.72498818486929,15.27232894086671,0 76.72441653907299,15.2723596672621,0 76.72400046139956,15.2723816608897,0 76.72350659966469,15.27233767363218,0 76.72298021614552,15.27245540421254,0 76.72306336462499,15.27219665559733,0 76.72309856861831,15.27177166030443,0 76.72310627996922,15.27088932334062,0 76.72359813004732,15.27088220770486,0 76.72407355159521,15.27086441861442,0 76.72441184520721,15.27097050625874,0 76.72467704862356,15.27085568578765,0 76.72502908855677,15.27085568578765,0 76.72532178461552,15.27093945622205,0 76.72573115676641,15.27096403750149,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

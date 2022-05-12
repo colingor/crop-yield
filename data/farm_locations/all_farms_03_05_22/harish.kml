@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>harish.kmz</name>
+	<Style id="AREA_FF00FF007">
+		<LineStyle>
+			<color>ff00ff00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8000ff00</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>harish</name>
+		<visibility>0</visibility>
+		<description>8-2-22</description>
+		<styleUrl>#AREA_FF00FF007</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.9723365,15.1078549,0 76.97222549999999,15.1078559,0 76.97201699999999,15.1078882,0 76.97190500000001,15.1078805,0 76.9718319,15.1079167,0 76.971677,15.1079226,0 76.9715714,15.1079727,0 76.9714389,15.1079501,0 76.9713665,15.1077834,0 76.9713816,15.1076497,0 76.971328,15.1075222,0 76.9713316,15.1073451,0 76.9714731,15.1073687,0 76.9715922,15.1073101,0 76.971677,15.1073402,0 76.9717984,15.1073072,0 76.9719667,15.1072975,0 76.972088,15.1074095,0 76.9721206,15.1075523,0 76.9722513,15.1076351,0 76.9723053,15.1077416,0 76.9723365,15.1078549,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

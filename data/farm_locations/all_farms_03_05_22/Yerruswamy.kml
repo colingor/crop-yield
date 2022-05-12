@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Yerruswamy.kmz</name>
+	<Style id="AREA_FF22EE220">
+		<LineStyle>
+			<color>ff22ee22</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8022ee22</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Yerruswamy</name>
+		<visibility>0</visibility>
+		<open>1</open>
+		<description>9980910291</description>
+		<styleUrl>#AREA_FF22EE220</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.71320590000001,15.2554928,0 76.7143653,15.255553,0 76.714539,15.2577108,0 76.71343830000001,15.2577897,0 76.71320590000001,15.2554928,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

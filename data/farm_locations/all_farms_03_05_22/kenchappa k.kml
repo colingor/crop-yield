@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>kenchappa k.kmz</name>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ff00ff00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8000ff00</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>kenchappa k</name>
+		<visibility>0</visibility>
+		<description>13-4-22</description>
+		<styleUrl>#AREA_FF00FF001</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.956835,15.1199006,0 76.9563706,15.1199796,0 76.9560256,15.1200861,0 76.9556686,15.1201055,0 76.9554241,15.1201605,0 76.95516929999999,15.1202702,0 76.95494840000001,15.1202799,0 76.95452589999999,15.1202939,0 76.9544428,15.1198724,0 76.9543254,15.1196721,0 76.9543422,15.1194038,0 76.9542671,15.118949,0 76.9545631,15.1189736,0 76.9548113,15.1188833,0 76.95509250000001,15.1188283,0 76.9554942,15.1187409,0 76.9557715,15.1189341,0 76.9560001,15.1192228,0 76.95633170000001,15.1194727,0 76.956835,15.1199006,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>
