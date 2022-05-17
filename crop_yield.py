@@ -76,8 +76,8 @@ ALL_BANDS = (
     BAND_SCL_60M,
 )
 
-# REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M, BAND_SCL_60M
-REPORT_SUMMARY_BANDS = ALL_BANDS
+REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M, BAND_SCL_60M
+# REPORT_SUMMARY_BANDS = ALL_BANDS
 
 log = logging.getLogger(__name__)
 DATA_DIRECTORY = "data"
@@ -85,6 +85,7 @@ ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX = "all_farms_27_03_22"
 FARM_SENTINEL_DATA_DIRECTORY = f"{DATA_DIRECTORY}/sentinel2"
 FARM_SUMMARIES_DIRECTORY = f"{FARM_SENTINEL_DATA_DIRECTORY}/farm_summaries"
 FARM_LOCATIONS_DIRECTORY = f"{DATA_DIRECTORY}/farm_locations"
+FARMS_DIR = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_03_05_22"
 FARMS_KMZ = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.kmz"
 FARMS_KML = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.kml"
 FARMS_GEOJSON = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.geojson"
@@ -127,8 +128,8 @@ class CropDataHandler:
         :return:
         """
 
-        if not os.path.exists(FARMS_KMZ):
-            sys.exit(f"Unable to find file {FARMS_KMZ} - aborting")
+        if not os.path.exists(FARMS_DIR):
+            sys.exit(f"Unable to find file {FARMS_DIR} - aborting")
 
         # Ensure directory to store Sentinel2 data exists
         os.makedirs(FARM_SENTINEL_DATA_DIRECTORY, exist_ok=True)
@@ -154,19 +155,26 @@ class CropDataHandler:
             )
             self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
         else:
-            kmz = ZipFile(FARMS_KMZ, "r")
-            log.debug("Unzipped kmz")
-            kml = kmz.open("doc.kml", "r").read()
-            with open(FARMS_KML, "wb") as f:
-                f.write(kml)
 
-            farms_geojson = kml2geojson.main.convert(FARMS_KML)[0]
+            gpd.io.file.fiona.drvsupport.supported_drivers["KML"] = "rw"
+            latest_farms = glob(
+                f"{FARMS_DIR}/*.kmz",
+                recursive=False,
+            )
 
-            with open(FARMS_GEOJSON, "w") as f:
-                geojson.dump(farms_geojson, f)
+            def _read_kmz_to_geopandas(kmz_path):
+                kmz = ZipFile(kmz_path, "r")
+                kml = kmz.open("doc.kml", "r").read()
+                kml_path = Path(kmz_path).with_suffix(".kml")
+                with open(kml_path, "wb") as kml_file:
+                    kml_file.write(kml)
+                farm_df = gpd.read_file(kml_path, driver="KML")
+                return farm_df
 
+            # Load each farm kmz into geopandas then combine to single geopandas dataframe
+            farm_bounds = pd.concat(map(_read_kmz_to_geopandas, latest_farms))
+            farm_bounds.to_file(FARMS_GEOJSON, driver="GeoJSON")
             # Save as shapefile in desired projection
-            farm_bounds = gpd.read_file(FARMS_GEOJSON)
             self.farm_bounds_32643 = farm_bounds.to_crs({"init": "epsg:32643"})
             self.farm_bounds_32643.to_file(f"{FARM_LOCATIONS_DIRECTORY}/individual_farm_bounds.shp")
 
@@ -183,6 +191,38 @@ class CropDataHandler:
             # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
             # It seems rasterio won't work with 3D geometry
             self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
+
+        #     Keeping the original code for now as we don't know what format the rest of the farms will be in
+
+        #     kmz = ZipFile(FARMS_KMZ, "r")
+        #     log.debug("Unzipped kmz")
+        #     kml = kmz.open("doc.kml", "r").read()
+        #     with open(FARMS_KML, "wb") as f:
+        #         f.write(kml)
+        #
+        #     farms_geojson = kml2geojson.main.convert(FARMS_KML)[0]
+        #
+        #     with open(FARMS_GEOJSON, "w") as f:
+        #         geojson.dump(farms_geojson, f)
+        #
+        #     # Save as shapefile in desired projection
+        #     farm_bounds = gpd.read_file(FARMS_GEOJSON)
+        #     self.farm_bounds_32643 = farm_bounds.to_crs({"init": "epsg:32643"})
+        #     self.farm_bounds_32643.to_file(f"{FARM_LOCATIONS_DIRECTORY}/individual_farm_bounds.shp")
+        #
+        #     # Plot the bounds of the fields (not coloured in)
+        #     # self.farm_bounds_32643.boundary.plot()
+        #     # plt.show()
+        #
+        #     # Save overall bounding box in desired projection
+        #     self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
+        #
+        #     self.total_bbox = gpd.GeoDataFrame({"geometry": self.total_bbox_32643}, index=[0], crs=from_epsg(32643))
+        #     self.total_bbox.to_file(f"{FARM_LOCATIONS_DIRECTORY}/total_bounds.shp")
+        #
+        #     # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
+        #     # It seems rasterio won't work with 3D geometry
+        #     self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
 
         if os.path.exists(SENTINEL_PRODUCTS_GEOJSON):
             self.products_df = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
@@ -275,9 +315,14 @@ class CropDataHandler:
         # Filter products_df on tile id
         # products_df = products_df.loc[products_df['title'].str.contains("T43PFT", case=False)]
 
-        # Granule T43PFS contains all the farms
-        self.products_df = self.products_df.loc[self.products_df["title"].str.contains("T43PFS", case=False)]
-        log.debug(f"{len(self.products_df)} products available for tile number T43PFS")
+        # Granules T43PFS and T43PGS contain all the farms
+        required_granules = ("T43PFS", "T43PGS")
+
+        self.products_df = self.products_df.loc[
+            self.products_df["title"].str.contains("|".join(required_granules), case=False)
+        ]
+
+        log.debug(f"{len(self.products_df)} products available for tiles {required_granules}")
 
         if verify_products:
             # Various plots below to debug product and farm positions
@@ -291,7 +336,7 @@ class CropDataHandler:
             plt.show()
 
             # Product positions with uuids overlaid
-            ax = self.products_df.plot(column="uuid", cmap=None, figsize=(20, 20))
+            ax = self.products_df.plot(column="uuid", cmap=None, figsize=(20, 20), alpha=0.3)
             # products_df.apply(lambda x: ax.annotate(s=x.uuid, xy=x.geometry.centroid.coords[0], ha='center'),axis=1)
             self.products_df.apply(
                 lambda x: ax.annotate(text=x["uuid"], xy=x.geometry.centroid.coords[0], ha="center"), axis=1
@@ -326,23 +371,19 @@ class CropDataHandler:
                 lambda x: ax.annotate(text=x["title"], xy=x.geometry.centroid.coords[0], ha="center"), axis=1
             )
 
-            farm_bounds.plot(ax=ax, column="name", cmap=None, figsize=(50, 50))
+            farm_bounds.plot(ax=ax, column="Name", cmap=None, figsize=(50, 50))
             farm_bounds.apply(
-                lambda x: ax.annotate(text=x["name"], xy=x.geometry.centroid.coords[0], ha="center"), axis=1
+                lambda x: ax.annotate(text=x["Name"], xy=x.geometry.centroid.coords[0], ha="center"), axis=1
             )
             ax.set_title("Fields on sentinel data", fontsize=10, pad=10)
             plt.show()
-
-            # Show field outlines on both products
-            base = self.products_df.plot(color="white", edgecolor="black")
-            farm_bounds.plot(ax=base, marker="o", color="red", markersize=5)
 
     def download_sentinel_products(self):
         """
         Get available sentinel 2 products and download
         :return:
         """
-        self.get_available_sentinel_products_df()
+        self.get_available_sentinel_products_df(verify_products=False)
 
         self.download_sentinel_product_files()
 
@@ -541,7 +582,7 @@ class CropDataHandler:
             :return:
             """
 
-            farm_name = farm["name"]
+            farm_name = farm["Name"]
             farm_geometry = farm["geometry"]
 
             # Visualise geometry
@@ -554,14 +595,16 @@ class CropDataHandler:
             # plt.plot(x1,y1, x, y)
             # plt.show()
 
-            original_rasters = self.get_original_product_rasters(product)
+            # Check that the farm geometry is within the product -  this is not always the case as we have products from different granules
+            if product.geometry.contains(farm_geometry):
+                original_rasters = self.get_original_product_rasters(product)
 
-            if original_rasters:
-                # Crop all rasters to individual farm bboxes
-                [self.crop_raster_to_geometry(raster, farm_geometry, farm_name) for raster in original_rasters]
+                if original_rasters:
+                    # Crop all rasters to individual farm bboxes
+                    [self.crop_raster_to_geometry(raster, farm_geometry, farm_name) for raster in original_rasters]
 
-            else:
-                log.debug(f"Skipping product {product['title']} as associated rasters not found")
+                else:
+                    log.debug(f"Skipping product {product['title']} as associated rasters not found")
 
         self.farm_bounds_32643.apply(_process_products_for_individual_farm, axis=1)
 
@@ -593,6 +636,8 @@ class CropDataHandler:
         # open products so we have extra info
         self.check_products_geojson_exists()
 
+        # Make sure geometries are in the correct crs as we have to check whether each farm polygon is within each product
+        self.products_df = self.products_df.to_crs({"init": "epsg:32643"})
         self.products_df = self.products_df.apply(self.process_products_for_farms, axis=1)
 
         self.save_products_df_to_geojson()
@@ -771,7 +816,7 @@ class CropDataHandler:
             log.error(e)
             sys.exit("Farm index provided is out of range - exiting")
 
-        farm_name = farm_details["name"]
+        farm_name = farm_details["Name"]
 
         if filter_clouds:
             cloud_free_products = farm_details["cloud_free_products"]
@@ -782,15 +827,10 @@ class CropDataHandler:
         else:
             filtered_products_df = self.products_df[self.products_df[band].notnull()]
 
+        # Filter products for areas other than this farm
+        filtered_products_df = filtered_products_df[filtered_products_df.geometry.contains(farm_details.geometry)]
         filtered_products_df.reset_index(inplace=True)
 
-        # filtered_products_df[band] = filtered_products_df[band].map(lambda x: self.get_farm_raster_from_product_raster_path(farm_name, x))
-
-        # band_rasters = list(
-        #     filter(None, [self.get_farm_raster_from_product_raster_path(farm_name, band) for band in filtered_products_df[band]])
-        # )
-
-        # number_of_raster = len(band_rasters)
         number_of_raster = len(filtered_products_df)
 
         cols = 6
@@ -849,7 +889,7 @@ class CropDataHandler:
 
             """
             scene_classification_raster = self.get_farm_raster_from_product_raster_path(
-                farm["name"], default_scene_classification_path
+                farm["Name"], default_scene_classification_path
             )
             if scene_classification_raster:
                 with rasterio.open(scene_classification_raster, "r") as src:
@@ -1028,22 +1068,22 @@ class CropDataHandler:
             f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/{farm_name}/"
             f"{raster_file_path.parent.name}/{raster_file_path.name}"
         )
-        return raster_file_path
+        return raster_file_path if os.path.exists(raster_file_path) else None
 
 
 @click.command(context_settings=dict(ignore_unknown_options=True))
 @click.option("--download", "-d", is_flag=True, help="Download Sentinel 2 data")
-@click.option("--crop-all", "-ca", is_flag=True, help="Crop Sentintel 2 rasters to bounds of all farms")
+# @click.option("--crop-all", "-ca", is_flag=True, help="Crop Sentinel 2 rasters to bounds of all farms")
 @click.option(
-    "--crop-individual-farms", "-ci", is_flag=True, help="Crop Sentintel 2 rasters individual farm boundaries"
+    "--crop-individual-farms", "-ci", is_flag=True, help="Crop Sentinel 2 rasters individual farm boundaries"
 )
 @click.option("--farm_summaries", "-fs", is_flag=True, help="Generate summary jpegs for specified bands over time")
-@click.option(
-    "--farm_summaries_all",
-    "-fsa",
-    is_flag=True,
-    help="Generate summary jpegs for the bbox of all farms for specified bands",
-)
+# @click.option(
+#     "--farm_summaries_all",
+#     "-fsa",
+#     is_flag=True,
+#     help="Generate summary jpegs for the bbox of all farms for specified bands",
+# )
 @click.option(
     "--sentinel_date_range",
     required=True,
@@ -1052,7 +1092,7 @@ class CropDataHandler:
     help='Specify the date window to get sentinel data. Default is ("20210401", "20220401").'
     " Has to be combined with -d flag to start download",
 )
-def main(download, crop_all, crop_individual_farms, sentinel_date_range, farm_summaries, farm_summaries_all):
+def main(download, crop_individual_farms, sentinel_date_range, farm_summaries):
     """
     Download and process Sentinel 2 rasters.
 
@@ -1061,7 +1101,6 @@ def main(download, crop_all, crop_individual_farms, sentinel_date_range, farm_su
 
     :param farm_summaries:
     :param crop_individual_farms:
-    :param crop_all:
     :param download:
     :param sentinel_date_range:
     """
@@ -1070,18 +1109,18 @@ def main(download, crop_all, crop_individual_farms, sentinel_date_range, farm_su
     if download:
         crop_data_handler.download_sentinel_products()
 
-    if crop_all:
-        crop_data_handler.crop_rasters_to_all_fields_bbox()
+    # if crop_all:
+    #     crop_data_handler.crop_rasters_to_all_fields_bbox()
 
     if crop_individual_farms:
         crop_data_handler.crop_rasters_to_individual_fields_bbox()
         crop_data_handler.add_cloud_free_products_to_farms_df()
 
     if farm_summaries:
-        crop_data_handler.generate_individual_farm_bands_summary(filter_clouds=True)
+        crop_data_handler.generate_individual_farm_bands_summary(filter_clouds=False)
 
-    if farm_summaries_all:
-        crop_data_handler.generate_all_farms_bands_summary()
+    # if farm_summaries_all:
+    #     crop_data_handler.generate_all_farms_bands_summary()
 
     # crop_data_handler.generate_individual_farm_cloud_series_over_time(0, True)
     # crop_data_handler.add_cloud_free_products_to_farms_df()

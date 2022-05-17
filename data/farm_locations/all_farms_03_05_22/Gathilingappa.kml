@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Gathilingappa.kmz</name>
+	<Style id="AREA_FF22EE227">
+		<LineStyle>
+			<color>ff22ee22</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8022ee22</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Gathilingappa</name>
+		<visibility>0</visibility>
+		<description>9009885909</description>
+		<styleUrl>#AREA_FF22EE227</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.71291321516037,15.2515371369246,0 76.71456512063742,15.2514430077763,0 76.71458356082441,15.25340353779056,0 76.71396631747484,15.25343491388526,0 76.71300072222948,15.25339156958825,0 76.71291321516037,15.2515371369246,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

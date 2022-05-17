@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Basavaraj K.kmz</name>
+	<Style id="AREA_FF22EE228">
+		<LineStyle>
+			<color>ff22ee22</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8022ee22</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Basavaraj K</name>
+		<visibility>0</visibility>
+		<description>-</description>
+		<styleUrl>#AREA_FF22EE228</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.71314422041178,15.25548987615254,0 76.7132555320859,15.25651945223919,0 76.7126323,15.2565541,0 76.71254039999999,15.2554993,0 76.71314422041178,15.25548987615254,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

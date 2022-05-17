@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Huliganna.kmz</name>
+	<Style id="AREA_FF22EE226">
+		<LineStyle>
+			<color>ff22ee22</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8022ee22</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Huliganna</name>
+		<visibility>0</visibility>
+		<open>1</open>
+		<description>-</description>
+		<styleUrl>#AREA_FF22EE226</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7134754732251,15.25886549539205,0 76.7146211117506,15.2587542263239,0 76.71464793384075,15.25891627805764,0 76.71353179961443,15.25900167053768,0 76.71218063682319,15.2591258777194,0 76.71216957271099,15.25898808537272,0 76.7134754732251,15.25886549539205,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

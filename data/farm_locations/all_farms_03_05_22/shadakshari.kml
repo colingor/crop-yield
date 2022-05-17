@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>shadakshari.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>shadakshari</name>
+		<visibility>0</visibility>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.73099331557751,15.24346484318047,0 76.73092860728502,15.24317403426713,0 76.73084478825331,15.24300970602703,0 76.73081662505865,15.24274574543547,0 76.7308035492897,15.24257753508173,0 76.73077773302794,15.24238409300855,0 76.73099331557751,15.24233848205902,0 76.73112910240889,15.24230516341587,0 76.73129037022591,15.24231777921341,0 76.7314476147294,15.24222008763321,0 76.73158977180721,15.24222849816837,0 76.73186335712671,15.24211398546818,0 76.73195824027063,15.24242194038469,0 76.73194751143456,15.2425940326416,0 76.73200584948063,15.24276935957053,0 76.73207156360149,15.24301908697332,0 76.73207256942989,15.24327981241675,0 76.73190660774708,15.24336100600619,0 76.7317708209157,15.24325910966383,0 76.73167191445827,15.24333609801596,0 76.73145432025194,15.24331539526857,0 76.73132725059986,15.2433755626225,0 76.73117838799953,15.24341502722163,0 76.73099331557751,15.24346484318047,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>
