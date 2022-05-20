@@ -25,9 +25,11 @@ from fiona.crs import from_epsg
 from geopandas import GeoDataFrame
 from matplotlib import gridspec
 from pandas import Series
+from pyproj import Transformer
 from rasterio import plot
 from rasterio.mask import mask
 from rasterio.plot import show, show_hist
+from rasterio.transform import rowcol, xy
 from sentinelsat.sentinel import SentinelAPI
 from shapely.geometry import Polygon, MultiPolygon
 import pandas as pd
@@ -810,20 +812,12 @@ class CropDataHandler:
         """
 
         # Get the farm
-        try:
-            farm_details = self.farm_bounds_32643.iloc[farm_df_index]
-        except IndexError as e:
-            log.error(e)
-            sys.exit("Farm index provided is out of range - exiting")
+        farm_details = self.get_farm_from_dataframe(farm_df_index)
 
         farm_name = farm_details["Name"]
 
         if filter_clouds:
-            cloud_free_products = farm_details["cloud_free_products"]
-
-            # Only want products that are cloud free for specified farm. Copy, filter and reset index
-            filtered_products_df = self.products_df.query("uuid in @cloud_free_products").copy()
-            filtered_products_df = filtered_products_df[filtered_products_df[band].notnull()]
+            filtered_products_df = self.get_cloud_free_products_for_farm(band, farm_details)
         else:
             filtered_products_df = self.products_df[self.products_df[band].notnull()]
 
@@ -869,6 +863,33 @@ class CropDataHandler:
             plt.savefig(f"{farm_name_dir}/{band}_including_clouds.jpg")
         if verify_images:
             plt.show()
+
+    def get_cloud_free_products_for_farm(self, band: str, farm_details: Series) -> GeoDataFrame:
+        """
+        Get dataframe containing cloud free products for the specified farm
+        :param band:
+        :param farm_details:
+        :return: filtered_products_df GeoDataFrame
+        """
+        cloud_free_products = farm_details["cloud_free_products"]
+        # Only want products that are cloud free for specified farm. Copy, filter and reset index
+        filtered_products_df = self.products_df.query("uuid in @cloud_free_products").copy()
+        filtered_products_df = filtered_products_df[filtered_products_df[band].notnull()]
+        filtered_products_df.reset_index(inplace=True)
+        return filtered_products_df
+
+    def get_farm_from_dataframe(self, farm_df_index: int) -> Series:
+        """
+        Safely retrieve farm details at specified index
+        :param farm_df_index:
+        :return: Farm Series
+        """
+        try:
+            farm_details = self.farm_bounds_32643.iloc[farm_df_index]
+        except IndexError as e:
+            log.error(e)
+            sys.exit("Farm index provided is out of range - exiting")
+        return farm_details
 
     def set_cloud_free_products(self, farm: Series) -> Series:
         """
@@ -934,11 +955,7 @@ class CropDataHandler:
         """
 
         # Get the farm
-        try:
-            farm_details = self.farm_bounds_32643.iloc[farm_df_index]
-        except IndexError as e:
-            log.error(e)
-            sys.exit("Farm index provided is out of range - exiting")
+        farm_details = self.get_farm_from_dataframe(farm_df_index)
 
         farm_name = farm_details["name"]
 
@@ -1070,6 +1087,212 @@ class CropDataHandler:
         )
         return raster_file_path if os.path.exists(raster_file_path) else None
 
+    def get_pixel_for_location_all_products(self, farm_index: int, band: str, x: float, y: float):
+        """
+        Given a farm index, get the farm's cloud free products. For each, get the pixel value in the specified band raster.
+        :param farm_index:
+        :param band:
+        :param x:
+        :param y:
+        :return:
+        """
+
+        # Get cloud free products
+        cloud_free_products = self.get_cloud_free_products_for_farm(band, self.get_farm_from_dataframe(farm_index))
+
+        pixel_values = [
+            self.get_pixel_for_location_for_specified_product_and_farm(
+                product_band=product_band, farm_index=farm_index, band=band, x=x, y=y
+            )
+            for product_band in cloud_free_products[band]
+        ]
+        return pixel_values
+
+    def get_pixel_for_location_for_specified_product_and_farm(
+        self, product_band: str, farm_index: int, band: str, x: float, y: float
+    ):
+        """
+        Given a farm and a band, get the pixel value for the specified location
+        :param farm_index:
+        :param band:
+        :return:
+        """
+
+        # Get path for farm
+        farm_raster = self.get_farm_raster_from_product_raster_path(
+            self.get_farm_from_dataframe(farm_index).Name, product_band
+        )
+        if farm_raster:
+            with rasterio.open(farm_raster) as src:
+                # convert coordinate to raster projection
+                transformer = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True)
+                xx, yy = transformer.transform(x, y)
+
+                # get value from grid.
+                pixel_values = list(src.sample([(xx, yy)]))[0]
+                print(pixel_values)
+                # Returns if coords are outwith the raster
+                return pixel_values[0]
+                # Alternative src.index(xx, yy)
+                # r = src.read(1)
+                # r[src.index(xx, yy)]
+                # p_values = src.index(xx, yy)
+                #
+                #
+                # # To sanity check
+                # aff = src.transform
+                # loc = rowcol(aff, xx, yy)
+                #
+                # # Get x and y of pixel at specified row and column
+                # test = src.transform * loc
+                # res = xy(transform=aff, rows=loc[0], cols=loc[1])
+                # t = Transformer.from_crs("EPSG:32643", "EPSG:4326", always_xy=True)
+                # check = t.transform(*res)
+                #
+                # left, bottom, right, top = src.bounds
+                # test = rowcol(aff, left, top)
+                # print(test)
+
+    def generate_ndvi(self, product, farm_name):
+        """
+        Calculate the NDVI for a farm for the specified product. Save the results as a raster
+        :param product:
+        :param farm_name:
+        :return:
+        """
+
+        red_path = self.get_farm_raster_from_product_raster_path(farm_name, product[BAND_4_10M])
+        nir_path = self.get_farm_raster_from_product_raster_path(farm_name, product[BAND_8_10M])
+
+        if red_path and nir_path:
+
+            with rasterio.open(red_path) as red:
+                red_band = red.read(1)
+                out_meta = red.meta.copy()
+            with rasterio.open(nir_path) as nir:
+                nir_band = nir.read(1)
+
+            # Allow division by zero
+            np.seterr(divide="ignore", invalid="ignore")
+            ndvi = (nir_band.astype(float) - red_band.astype(float)) / (nir_band + red_band)
+            # plt.imshow(ndvi)
+            # plt.show()
+            # vmin, vmax = np.nanpercentile(ndvi, (1,99))
+            # # img_plt = plt.imshow(ndvi, cmap='gray', vmin=vmin, vmax=vmax)
+            # plt.imshow(ndvi, cmap='Greens', vmin=vmin, vmax=vmax)
+            # show(ndvi, cmap="Greens")
+
+            ndvi_raster_path = f"{Path(red_path).parent}/ndvi.tif"
+
+            out_meta.update(dtype=rasterio.float32, count=1)
+            with rasterio.open(
+                ndvi_raster_path,
+                "w",
+                **out_meta,
+            ) as ndvi_out:
+                ndvi_out.write(ndvi, 1)
+
+            # show(ndvi, cmap="Greens")
+
+            # Verify
+            # with rasterio.open(ndvi_raster_path, "r") as src:
+            #     fig, ax = plt.subplots(figsize=(15, 15))
+            #     show(src, ax=ax, cmap="Greens")
+            #     plt.show()
+
+        return product
+
+    def generate_ndwi(self, product, farm_name):
+        """
+        Calculate the NDWI(Normalised Difference Water Index) for a farm for the specified product. Save the results as a raster
+        :param product:
+        :param farm_name:
+        :return:
+        """
+
+        green_path = self.get_farm_raster_from_product_raster_path(farm_name, product[BAND_3_10M])
+        nir_path = self.get_farm_raster_from_product_raster_path(farm_name, product[BAND_8_10M])
+
+        if green_path and nir_path:
+
+            with rasterio.open(green_path) as red:
+                green_band = red.read(1)
+                out_meta = red.meta.copy()
+            with rasterio.open(nir_path) as nir:
+                nir_band = nir.read(1)
+
+            # Allow division by zero
+            np.seterr(divide="ignore", invalid="ignore")
+            # Calculate NDVI
+            # ndvi = (b4.astype(float) - b3.astype(float)) / (b4 + b3)
+            # https://custom-scripts.sentinel-hub.com/custom-scripts/sentinel-2/ndwi/
+            ndwi = (green_band.astype(float) - nir_band.astype(float)) / (green_band + nir_band)
+            # plt.imshow(ndvi)
+            # plt.show()
+            # vmin, vmax = np.nanpercentile(ndvi, (1,99))
+            # # img_plt = plt.imshow(ndvi, cmap='gray', vmin=vmin, vmax=vmax)
+            # plt.imshow(ndvi, cmap='Greens', vmin=vmin, vmax=vmax)
+            # show(ndvi, cmap="Greens")
+
+            out_raster_path = f"{Path(green_path).parent}/ndwi.tif"
+
+            out_meta.update(dtype=rasterio.float32, count=1)
+            with rasterio.open(
+                out_raster_path,
+                "w",
+                **out_meta,
+            ) as out:
+                out.write(ndwi, 1)
+
+            # show(ndvi, cmap="Greens")
+
+            # Verify
+            # with rasterio.open(ndvi_raster_path, "r") as src:
+            #     fig, ax = plt.subplots(figsize=(15, 15))
+            #     show(src, ax=ax, cmap="Greens")
+            #     plt.show()
+
+        return product
+
+    def apply_raster_generation_function(self, farm_df_index: int, analysis_func):
+        """
+        Generic function to apply the specified analysis function for each farm in suitable products
+        :param farm_df_index:
+        :param analysis_func:
+        :return:
+        """
+        farm_details = self.get_farm_from_dataframe(farm_df_index)
+
+        farm_name = farm_details["Name"]
+
+        # Filter out other areas
+        filtered_products_df = self.products_df[self.products_df.geometry.contains(farm_details.geometry)]
+        filtered_products_df.reset_index(inplace=True)
+
+        filtered_products_df.apply(analysis_func, farm_name=farm_name, axis=1)
+
+    def generate_all_farms_ndvi_rasters(self):
+        """
+        Generate ndvi rasters for all farms in appropriate products
+        :return:
+        """
+
+        [
+            self.apply_raster_generation_function(farm_index, self.generate_ndvi)
+            for farm_index in range(len(self.farm_bounds_32643))
+        ]
+
+    def generate_all_farms_ndwi_rasters(self):
+        """
+        Generate ndwi rasters for all farms in appropriate products
+        :return:
+        """
+
+        [
+            self.apply_raster_generation_function(farm_index, self.generate_ndwi)
+            for farm_index in range(len(self.farm_bounds_32643))
+        ]
+
 
 @click.command(context_settings=dict(ignore_unknown_options=True))
 @click.option("--download", "-d", is_flag=True, help="Download Sentinel 2 data")
@@ -1078,6 +1301,8 @@ class CropDataHandler:
     "--crop-individual-farms", "-ci", is_flag=True, help="Crop Sentinel 2 rasters individual farm boundaries"
 )
 @click.option("--farm_summaries", "-fs", is_flag=True, help="Generate summary jpegs for specified bands over time")
+@click.option("--ndvi", "-ndvi", is_flag=True, help="Generate ndvi tifs for each farm")
+@click.option("--ndwi", "-ndwi", is_flag=True, help="Generate ndwi tifs for each farm")
 # @click.option(
 #     "--farm_summaries_all",
 #     "-fsa",
@@ -1092,13 +1317,14 @@ class CropDataHandler:
     help='Specify the date window to get sentinel data. Default is ("20210401", "20220401").'
     " Has to be combined with -d flag to start download",
 )
-def main(download, crop_individual_farms, sentinel_date_range, farm_summaries):
+def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, ndvi, ndwi):
     """
     Download and process Sentinel 2 rasters.
 
     If you wish to download (-d), please ensure you set "SENTINEL_USER" and "SENTINEL_PASSWORD"
     environment variables. An account can be created at https://scihub.copernicus.eu/dhus/#/self-registration
 
+    :param ndvi:
     :param farm_summaries:
     :param crop_individual_farms:
     :param download:
@@ -1119,8 +1345,19 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries):
     if farm_summaries:
         crop_data_handler.generate_individual_farm_bands_summary(filter_clouds=False)
 
+    if ndvi:
+        crop_data_handler.generate_all_farms_ndvi_rasters()
+
+    if ndwi:
+        crop_data_handler.generate_all_farms_ndwi_rasters()
+
     # if farm_summaries_all:
     #     crop_data_handler.generate_all_farms_bands_summary()
+
+    # 0 is narasayya 76.9746213,15.1076625
+    # pixels = crop_data_handler.get_pixel_for_location_all_products(
+    #     farm_index=0, band=BAND_4_10M, x=76.9746213, y=15.1076625
+    # )
 
     # crop_data_handler.generate_individual_farm_cloud_series_over_time(0, True)
     # crop_data_handler.add_cloud_free_products_to_farms_df()
