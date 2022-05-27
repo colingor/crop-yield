@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Dodda Basava G.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Dodda Basava G</name>
+		<visibility>0</visibility>
+		<description>9964306212</description>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7290158,15.2434241,0 76.7290119,15.2434437,0 76.7290242,15.2434726,0 76.7290264,15.2434844,0 76.72906930000001,15.2435908,0 76.72906930000001,15.2436068,0 76.7290129,15.2436181,0 76.72899320000001,15.2436176,0 76.728933,15.2436026,0 76.72891679999999,15.2436042,0 76.72766110000001,15.2433505,0 76.72751289999999,15.2434018,0 76.7274992,15.2434104,0 76.7288753,15.2428647,0 76.7288843,15.242876,0 76.7288896,15.2429125,0 76.7289052,15.2429288,0 76.72890820000001,15.2429387,0 76.7289035,15.242949,0 76.7289048,15.2429666,0 76.7289226,15.243008,0 76.7289251,15.2430425,0 76.7289296,15.243057,0 76.72896710000001,15.2431145,0 76.7289667,15.2431286,0 76.72896009999999,15.2431492,0 76.7289822,15.2433449,0 76.7290095,15.2434021,0 76.72901779999999,15.2434073,0 76.7290158,15.2434241,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

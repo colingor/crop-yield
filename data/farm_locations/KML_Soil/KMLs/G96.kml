@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Tyagaraju.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Tyagaraju</name>
+		<visibility>0</visibility>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.73816118389368,15.27353955744099,0 76.73813603818417,15.27415375751515,0 76.73822723329067,15.2745095334603,0 76.73828288912773,15.2746398766783,0 76.73819940537214,15.27522916932319,0 76.73837408423424,15.27587247318018,0 76.73779875040054,15.27587247318018,0 76.73756439238787,15.27579582018462,0 76.73732232302427,15.27587247318018,0 76.7370168864727,15.27586859201653,0 76.7366199195385,15.27593360149836,0 76.73621658235787,15.27601639961521,0 76.73625480383636,15.2758647108528,0 76.73632252961399,15.27553190079573,0 76.73615321516991,15.27483361247799,0 76.73669535666704,15.27480062242123,0 76.73679862171412,15.27476601519925,0 76.73692166805267,15.27434878749434,0 76.73687003552914,15.27381285890718,0 76.73730656504631,15.27354117461048,0 76.73757243901491,15.27355249479653,0 76.73778265714645,15.27357190082834,0 76.73816118389368,15.27353955744099,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

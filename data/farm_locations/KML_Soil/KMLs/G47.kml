@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Mudhappa.kmz</name>
+	<Style id="AREA_FF22EE224">
+		<LineStyle>
+			<color>ff22ee22</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8022ee22</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Mudhappa</name>
+		<visibility>0</visibility>
+		<open>1</open>
+		<description>9731973139(420/413 survey number)</description>
+		<styleUrl>#AREA_FF22EE224</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.71214380000001,15.2583826,0 76.7120596,15.2579854,0 76.7145222,15.2577499,0 76.71458149999999,15.2581807,0 76.71214380000001,15.2583826,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

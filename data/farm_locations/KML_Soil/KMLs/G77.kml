@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>shankara1.kmz</name>
+	<Style id="AREA_FF00FF007">
+		<LineStyle>
+			<color>ff00ff00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8000ff00</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>shankara1</name>
+		<visibility>0</visibility>
+		<description>13-4-22</description>
+		<styleUrl>#AREA_FF00FF007</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.9586505,15.123893,0 76.9584007,15.1240108,0 76.95828040000001,15.1240497,0 76.9582827,15.1239089,0 76.95827730000001,15.1238063,0 76.95823679999999,15.1236807,0 76.95817510000001,15.1233952,0 76.9581345,15.1232192,0 76.9580936,15.1230716,0 76.9580802,15.122902,0 76.9580443,15.1228304,0 76.95812340000001,15.122857,0 76.95819849999999,15.1227958,0 76.95827869999999,15.1228188,0 76.9583897,15.1227622,0 76.95843120000001,15.1229246,0 76.9584581,15.1230729,0 76.95850230000001,15.1232052,0 76.95854919999999,15.1234341,0 76.958572,15.1234969,0 76.9585707,15.1235665,0 76.9586042,15.1236506,0 76.95861429999999,15.1237717,0 76.9586505,15.123893,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

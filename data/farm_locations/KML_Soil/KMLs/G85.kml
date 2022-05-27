@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>siddappa.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>siddappa</name>
+		<visibility>0</visibility>
+		<description>7026466124</description>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7197273671627,15.26482412664187,0 76.71954229474068,15.26474488203119,0 76.71948026865721,15.2647701109309,0 76.71934816986322,15.26474488203119,0 76.7192542925477,15.26477593298425,0 76.719128228724,15.26477399229983,0 76.71889621764421,15.26476428887739,0 76.71868398785591,15.26479307569596,0 76.7187302559614,15.26460806371461,0 76.71875406056643,15.26440720262022,0 76.71877216547728,15.26411383510484,0 76.71877820044756,15.26404817506457,0 76.71885464340448,15.26383178788991,0 76.71885397285223,15.26339933632107,0 76.71904474496843,15.26337443070621,0 76.71921908855438,15.26337249000883,0 76.71940516680479,15.26334726094117,0 76.71957112848759,15.2633511423364,0 76.71970926225185,15.26338219349558,0 76.71983733773232,15.26337249000883,0 76.7198933288455,15.26334337954589,0 76.72005526721478,15.26331459252856,0 76.71999324113131,15.26402682746084,0 76.72002140432595,15.26419275650541,0 76.72003950923681,15.26426617925716,0 76.72000128775835,15.26446315911189,0 76.71983867883682,15.26470639178093,0 76.7197273671627,15.26482412664187,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

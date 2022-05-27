@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>K Shankar guru.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>K Shankar guru</name>
+		<visibility>0</visibility>
+		<description>9980480959</description>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7394068,15.2434695,0 76.7394156,15.2434749,0 76.73942599999999,15.2434865,0 76.7394271,15.2434979,0 76.7394719,15.2436417,0 76.73949229999999,15.2437525,0 76.7395042,15.2437582,0 76.7395945,15.2443127,0 76.73956389999999,15.2443028,0 76.7395009,15.2443154,0 76.73948919999999,15.2443256,0 76.7394736,15.2443317,0 76.73945929999999,15.2443271,0 76.73942390000001,15.2443048,0 76.7394127,15.2442825,0 76.73941499999999,15.2442597,0 76.7394132,15.2442449,0 76.7394084,15.2442328,0 76.73939919999999,15.2442254,0 76.739406,15.2442139,0 76.73944400000001,15.2440131,0 76.7394353,15.2439583,0 76.7394103,15.2439274,0 76.7393974,15.2439188,0 76.73938459999999,15.2439042,0 76.73932139999999,15.243855,0 76.7393115,15.2438289,0 76.7393106,15.2438177,0 76.7392686,15.2436839,0 76.7392773,15.2436489,0 76.73926950000001,15.2435912,0 76.7392712,15.2436002,0 76.7392547,15.2435531,0 76.7392332,15.2435247,0 76.7392308,15.2435129,0 76.7392323,15.2434935,0 76.739237,15.2434826,0 76.7392463,15.2434728,0 76.739272,15.2434625,0 76.7393209,15.2434561,0 76.73934199999999,15.2434641,0 76.7393904,15.2434467,0 76.7394067,15.2434535,0 76.7394068,15.2434695,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>ballureppa.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>ballureppa</name>
+		<visibility>0</visibility>
+		<description>995442538</description>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7216511,15.2620684,0 76.7216233,15.2620915,0 76.7216155,15.2621027,0 76.7215961,15.2621959,0 76.7215743,15.2622276,0 76.7215403,15.2623224,0 76.7215308,15.2623311,0 76.721512,15.2623333,0 76.72149140000001,15.2623285,0 76.721458,15.2623124,0 76.72143579999999,15.26231,0 76.7213864,15.2622904,0 76.7213392,15.262257,0 76.72133030000001,15.262244,0 76.72131709999999,15.2622054,0 76.7213264,15.2621164,0 76.721296,15.2619592,0 76.7213129,15.2618284,0 76.7212756,15.2615905,0 76.72126179999999,15.2613517,0 76.72121540000001,15.2612121,0 76.72120649999999,15.2611439,0 76.7211914,15.2611014,0 76.721193,15.261088,0 76.7212083,15.261065,0 76.7212205,15.2610574,0 76.7215518,15.2610098,0 76.7216262,15.2610099,0 76.7216418,15.2610175,0 76.7216485,15.2610263,0 76.721655,15.2610431,0 76.7216562,15.2610849,0 76.7217045,15.2612577,0 76.7216961,15.2614901,0 76.7217393,15.2617393,0 76.72174939999999,15.2617613,0 76.7217607,15.2618135,0 76.72175729999999,15.2618297,0 76.7216932,15.2619327,0 76.7216459,15.262049,0 76.7216526,15.2620575,0 76.7216511,15.2620684,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>
