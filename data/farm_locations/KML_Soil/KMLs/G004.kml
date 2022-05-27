@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>B kapalla.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>B kapalla</name>
+		<visibility>0</visibility>
+		<description>7899241804</description>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.71873662620783,15.2652404029422,0 76.71870175749063,15.26519512040098,0 76.71872824430466,15.26501269635027,0 76.718745008111,15.26492342494854,0 76.71871986240149,15.26482833145712,0 76.7188911885023,15.26481571701113,0 76.71904977411032,15.26480471980121,0 76.71923853456974,15.26481733424784,0 76.71934481710196,15.26481442322176,0 76.71944305300713,15.26479339914333,0 76.71947591006756,15.26483253627227,0 76.71951647847891,15.26482121561588,0 76.71960566192867,15.26483091903568,0 76.71975620090961,15.26485905895054,0 76.71959962695837,15.26496353239459,0 76.71958386898041,15.26506574165794,0 76.71952586621046,15.26519059214631,0 76.71934179961681,15.26519997210228,0 76.71927407383919,15.26518929835926,0 76.71918857842684,15.26518606389156,0 76.71908363699913,15.26520547069697,0 76.71902563422918,15.26520741137742,0 76.71894516795872,15.26519479695422,0 76.71890359371901,15.26520838171763,0 76.71883452683686,15.2652226133736,0 76.71873662620783,15.2652404029422,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

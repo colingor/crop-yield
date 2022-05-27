@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>chandru PB.kmz</name>
+	<Style id="AREA_FF00FF006">
+		<LineStyle>
+			<color>ff00ff00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8000ff00</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>chandru PB</name>
+		<visibility>0</visibility>
+		<description>8-2-22</description>
+		<styleUrl>#AREA_FF00FF006</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.97226706892252,15.11630719798428,0 76.97196498513223,15.11639685595492,0 76.97170715779068,15.1164276050697,0 76.97152610868216,15.11648101141635,0 76.97129711508751,15.11647000647329,0 76.97115194052458,15.11653959654479,0 76.97099134325981,15.11638164323332,0 76.97088103741409,15.11601200613082,0 76.97103291749954,15.11562456619972,0 76.97126828134061,15.11566017056711,0 76.97144865989685,15.11561032445109,0 76.971655189991,15.11563654221488,0 76.97186708450317,15.11551289791779,0 76.97218291461468,15.11546823058854,0 76.97224829345942,15.11569091978869,0 76.97226874530315,15.11589062778242,0 76.97226706892252,15.11630719798428,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>K Mallikarjun.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>K Mallikarjun</name>
+		<visibility>0</visibility>
+		<description>9972078109</description>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.73804029999999,15.2436248,0 76.7380339,15.2436326,0 76.7379959,15.2436424,0 76.737981,15.2436385,0 76.73775259999999,15.243666,0 76.7377458,15.2436583,0 76.73773060000001,15.2435955,0 76.73770399999999,15.2435355,0 76.7376548,15.2429117,0 76.73762929999999,15.2427531,0 76.7376189,15.2427278,0 76.7376081,15.2427205,0 76.7375967,15.2427067,0 76.7375849,15.2427093,0 76.7375591,15.2426918,0 76.7375028,15.2426271,0 76.7374576,15.242537,0 76.7374537,15.2425166,0 76.7374564,15.242474,0 76.7374403,15.2423889,0 76.7374482,15.2424023,0 76.73746,15.2424106,0 76.73752450000001,15.2424127,0 76.73762720000001,15.2423925,0 76.73764060000001,15.2423836,0 76.73773869999999,15.2423646,0 76.7377485,15.242368,0 76.7377719,15.2424623,0 76.7377582,15.2424726,0 76.7380287,15.2434968,0 76.73804509999999,15.2436008,0 76.73804250000001,15.2436152,0 76.7380261,15.2436425,0 76.73804029999999,15.2436248,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

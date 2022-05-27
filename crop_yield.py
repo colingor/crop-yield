@@ -1,6 +1,8 @@
+import json
 import logging
 import math
 import os
+import re
 import sys
 import zipfile
 from dataclasses import dataclass
@@ -12,27 +14,23 @@ from zipfile import ZipFile
 
 import click
 import earthpy.plot as ep
-import geojson
 import geopandas as gpd
-import kml2geojson
-
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import rasterio
 import shapely
 from dateutil import parser
 from fiona.crs import from_epsg
 from geopandas import GeoDataFrame
 from matplotlib import gridspec
-from pandas import Series
+from pandas import Series, DataFrame
 from pyproj import Transformer
 from rasterio import plot
 from rasterio.mask import mask
-from rasterio.plot import show, show_hist
-from rasterio.transform import rowcol, xy
+from rasterio.plot import show
 from sentinelsat.sentinel import SentinelAPI
-from shapely.geometry import Polygon, MultiPolygon
-import pandas as pd
+from shapely.geometry import Polygon, MultiPolygon, shape
 
 pd.set_option("display.max_columns", None)  # or 1000
 pd.set_option("display.max_rows", None)  # or 1000
@@ -83,18 +81,18 @@ REPORT_SUMMARY_BANDS = BAND_TCI_20M, BAND_SCL_20M, BAND_TCI_10M, BAND_SCL_60M
 
 log = logging.getLogger(__name__)
 DATA_DIRECTORY = "data"
-ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX = "all_farms_27_03_22"
+ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX = "all_farms_24_05_22"
 FARM_SENTINEL_DATA_DIRECTORY = f"{DATA_DIRECTORY}/sentinel2"
 FARM_SUMMARIES_DIRECTORY = f"{FARM_SENTINEL_DATA_DIRECTORY}/farm_summaries"
 FARM_LOCATIONS_DIRECTORY = f"{DATA_DIRECTORY}/farm_locations"
-FARMS_DIR = f"{FARM_LOCATIONS_DIRECTORY}/all_farms_03_05_22"
-FARMS_KMZ = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.kmz"
-FARMS_KML = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.kml"
 FARMS_GEOJSON = f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}.geojson"
+FARMS_XLSX = f"{FARM_LOCATIONS_DIRECTORY}/MASTER_DOCUMENT_V1_240522.xlsx"
+NEW_KMLS = f"{FARM_LOCATIONS_DIRECTORY}/KML_Soil/KMLs"
 SENTINEL_PRODUCTS_GEOJSON = f"{FARM_SENTINEL_DATA_DIRECTORY}/products.geojson"
 FARMS_GEOJSON_VALID_PRODUCTS = (
     f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}_cloud_free_products.geojson"
 )
+INDIVIDUAL_BOUNDS_SHAPEFILE = f"{FARM_LOCATIONS_DIRECTORY}/individual_farm_bounds.shp"
 
 # Scene classification keys
 CLOUD_MEDIUM = 8
@@ -130,8 +128,8 @@ class CropDataHandler:
         :return:
         """
 
-        if not os.path.exists(FARMS_DIR):
-            sys.exit(f"Unable to find file {FARMS_DIR} - aborting")
+        if not os.path.exists(FARMS_XLSX):
+            sys.exit(f"Unable to find file {FARMS_XLSX} - aborting")
 
         # Ensure directory to store Sentinel2 data exists
         os.makedirs(FARM_SENTINEL_DATA_DIRECTORY, exist_ok=True)
@@ -140,9 +138,99 @@ class CropDataHandler:
         # Create api instance
         self.configure_api()
 
-        log.debug("Converting KML file")
-
         self.extract_geometries()
+
+    def convert_geometry_string_to_shape(self, geom_str: str) -> shape:
+        """
+        Parse a geometry string into a shape
+        :return:
+        """
+        try:
+            return shape(json.loads(geom_str))
+        except (TypeError, AttributeError):  # Handle NaN and empty strings
+            return None
+
+    def parse_excel_and_kml_farms(self):
+
+        field_id_farms_df = pd.read_excel(
+            FARMS_XLSX,
+            sheet_name="Farms identified by FieldID",
+            header=[1],
+            usecols=("field_id", "farm_name", "field_boundary"),
+        )
+        g_num_df = pd.read_excel(
+            FARMS_XLSX, sheet_name="Farms identified by G no", header=[1], usecols=("Sl.No", "Farmer name")
+        )
+
+        self._sanitize_dataframe_column_headers(field_id_farms_df)
+
+        # Standardise column names
+        g_num_df.rename(columns={"Sl.No": "field_id", "Farmer name": "farm_name"}, inplace=True)
+        self._sanitize_dataframe_column_headers(g_num_df)
+
+        # Convert geometry to shape
+        field_id_farms_df["field_boundary"] = field_id_farms_df["field_boundary"].apply(
+            self.convert_geometry_string_to_shape
+        )
+
+        gpd.io.file.fiona.drvsupport.supported_drivers["KML"] = "rw"
+
+        def _read_kmz_to_geopandas(kmz_path):
+            kmz = ZipFile(kmz_path, "r")
+            kml = kmz.open("doc.kml", "r").read()
+            kml_path = Path(kmz_path).with_suffix(".kml")
+            with open(kml_path, "wb") as kml_file:
+                kml_file.write(kml)
+            farm_df = gpd.read_file(kml_path, driver="KML")
+            # Add file name to dataframe
+            farm_df["field_id"] = Path(kmz_path).stem
+            return farm_df
+
+        latest_farms = glob(
+            f"{NEW_KMLS}/*.kmz",
+            recursive=False,
+        )
+
+        # Read list of kmz files into dataframe
+        kmz_df = pd.concat(map(_read_kmz_to_geopandas, latest_farms))
+        kmz_df.rename(columns={"geometry": "field_boundary"}, inplace=True)
+
+        r = re.compile("([a-zA-Z]+)([0-9]+)")
+        # Pad out the ids with 0s so we can join with ids in the master spreadsheet
+        kmz_df["field_id"] = kmz_df["field_id"].map(lambda x: f"G{r.match(x).groups()[1].zfill(3)}")
+
+        # join g_num_df with kmz to get field_boundary geometry
+        g_num_df = pd.merge(g_num_df, kmz_df[["field_id", "field_boundary"]], on="field_id", how="left")
+
+        # Combine into single fields list
+        fields_df = pd.concat([field_id_farms_df, g_num_df])
+        fields_df.reset_index(drop=True, inplace=True)
+        fields_df.rename(columns={"field_boundary": "geometry"}, inplace=True)
+
+        self.farm_bounds_32643 = gpd.GeoDataFrame(fields_df, geometry="geometry")
+        self.farm_bounds_32643.set_crs(epsg=4326, inplace=True)
+        self.farm_bounds_32643.to_file(FARMS_GEOJSON, driver="GeoJSON")
+
+        self.farm_bounds_32643 = self.farm_bounds_32643.to_crs({"init": "epsg:32643"})
+        self.farm_bounds_32643.to_file(INDIVIDUAL_BOUNDS_SHAPEFILE)
+
+        # Save overall bounding box in desired projection
+        self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
+
+        self.total_bbox = gpd.GeoDataFrame({"geometry": self.total_bbox_32643}, index=[0], crs=from_epsg(32643))
+        self.total_bbox.to_file(f"{FARM_LOCATIONS_DIRECTORY}/total_bounds.shp")
+
+        # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
+        # It seems rasterio won't work with 3D geometry
+        self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
+
+    def _sanitize_dataframe_column_headers(self, dataframe: DataFrame):
+        """
+        Strip, lower case and replace spaces with underscores
+        :param dataframe:
+        :return:
+        """
+        dataframe.columns = [c.strip().lower().replace(" ", "_") for c in dataframe.columns]
 
     def extract_geometries(self):
         """
@@ -157,74 +245,7 @@ class CropDataHandler:
             )
             self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
         else:
-
-            gpd.io.file.fiona.drvsupport.supported_drivers["KML"] = "rw"
-            latest_farms = glob(
-                f"{FARMS_DIR}/*.kmz",
-                recursive=False,
-            )
-
-            def _read_kmz_to_geopandas(kmz_path):
-                kmz = ZipFile(kmz_path, "r")
-                kml = kmz.open("doc.kml", "r").read()
-                kml_path = Path(kmz_path).with_suffix(".kml")
-                with open(kml_path, "wb") as kml_file:
-                    kml_file.write(kml)
-                farm_df = gpd.read_file(kml_path, driver="KML")
-                return farm_df
-
-            # Load each farm kmz into geopandas then combine to single geopandas dataframe
-            farm_bounds = pd.concat(map(_read_kmz_to_geopandas, latest_farms))
-            farm_bounds.to_file(FARMS_GEOJSON, driver="GeoJSON")
-            # Save as shapefile in desired projection
-            self.farm_bounds_32643 = farm_bounds.to_crs({"init": "epsg:32643"})
-            self.farm_bounds_32643.to_file(f"{FARM_LOCATIONS_DIRECTORY}/individual_farm_bounds.shp")
-
-            # Plot the bounds of the fields (not coloured in)
-            # self.farm_bounds_32643.boundary.plot()
-            # plt.show()
-
-            # Save overall bounding box in desired projection
-            self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
-
-            self.total_bbox = gpd.GeoDataFrame({"geometry": self.total_bbox_32643}, index=[0], crs=from_epsg(32643))
-            self.total_bbox.to_file(f"{FARM_LOCATIONS_DIRECTORY}/total_bounds.shp")
-
-            # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
-            # It seems rasterio won't work with 3D geometry
-            self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
-
-        #     Keeping the original code for now as we don't know what format the rest of the farms will be in
-
-        #     kmz = ZipFile(FARMS_KMZ, "r")
-        #     log.debug("Unzipped kmz")
-        #     kml = kmz.open("doc.kml", "r").read()
-        #     with open(FARMS_KML, "wb") as f:
-        #         f.write(kml)
-        #
-        #     farms_geojson = kml2geojson.main.convert(FARMS_KML)[0]
-        #
-        #     with open(FARMS_GEOJSON, "w") as f:
-        #         geojson.dump(farms_geojson, f)
-        #
-        #     # Save as shapefile in desired projection
-        #     farm_bounds = gpd.read_file(FARMS_GEOJSON)
-        #     self.farm_bounds_32643 = farm_bounds.to_crs({"init": "epsg:32643"})
-        #     self.farm_bounds_32643.to_file(f"{FARM_LOCATIONS_DIRECTORY}/individual_farm_bounds.shp")
-        #
-        #     # Plot the bounds of the fields (not coloured in)
-        #     # self.farm_bounds_32643.boundary.plot()
-        #     # plt.show()
-        #
-        #     # Save overall bounding box in desired projection
-        #     self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
-        #
-        #     self.total_bbox = gpd.GeoDataFrame({"geometry": self.total_bbox_32643}, index=[0], crs=from_epsg(32643))
-        #     self.total_bbox.to_file(f"{FARM_LOCATIONS_DIRECTORY}/total_bounds.shp")
-        #
-        #     # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
-        #     # It seems rasterio won't work with 3D geometry
-        #     self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
+            self.parse_excel_and_kml_farms()
 
         if os.path.exists(SENTINEL_PRODUCTS_GEOJSON):
             self.products_df = gpd.read_file(SENTINEL_PRODUCTS_GEOJSON)
@@ -250,6 +271,9 @@ class CropDataHandler:
                         new_p = Polygon(lines)
                         new_multi_p.append(new_p)
                     new_geo.append(MultiPolygon(new_multi_p))
+            else:
+                # We don't have to do anything to this geometry
+                new_geo.append(p)
         return new_geo
 
     def configure_api(
@@ -584,7 +608,7 @@ class CropDataHandler:
             :return:
             """
 
-            farm_name = farm["Name"]
+            field_id = farm["field_id"]
             farm_geometry = farm["geometry"]
 
             # Visualise geometry
@@ -603,7 +627,7 @@ class CropDataHandler:
 
                 if original_rasters:
                     # Crop all rasters to individual farm bboxes
-                    [self.crop_raster_to_geometry(raster, farm_geometry, farm_name) for raster in original_rasters]
+                    [self.crop_raster_to_geometry(raster, farm_geometry, field_id) for raster in original_rasters]
 
                 else:
                     log.debug(f"Skipping product {product['title']} as associated rasters not found")
@@ -814,7 +838,7 @@ class CropDataHandler:
         # Get the farm
         farm_details = self.get_farm_from_dataframe(farm_df_index)
 
-        farm_name = farm_details["Name"]
+        field_id = farm_details["field_id"]
 
         if filter_clouds:
             filtered_products_df = self.get_cloud_free_products_for_farm(band, farm_details)
@@ -823,7 +847,12 @@ class CropDataHandler:
 
         # Filter products for areas other than this farm
         filtered_products_df = filtered_products_df[filtered_products_df.geometry.contains(farm_details.geometry)]
-        filtered_products_df.reset_index(inplace=True)
+
+        try:
+            filtered_products_df.reset_index(inplace=True)
+        except ValueError:
+            # Ignore - this can arise if reset_index has already been called as it is in get_cloud_free_products_for_farm
+            pass
 
         number_of_raster = len(filtered_products_df)
 
@@ -833,9 +862,9 @@ class CropDataHandler:
         gs = gridspec.GridSpec(rows, cols, wspace=0.01)
 
         fig = plt.figure(figsize=(24, 24))
-        fig.suptitle(f"Farm {farm_df_index}: {farm_name.capitalize()} {band}, all products", fontsize=40)
+        fig.suptitle(f"Farm {farm_df_index}: {field_id} {band}, all products", fontsize=40)
 
-        def _add_band_image_to_grid(product, band_to_display, farm_name):
+        def _add_band_image_to_grid(product, band_to_display, field_id):
             index = product.name
             ax = fig.add_subplot(gs[index])
 
@@ -845,15 +874,15 @@ class CropDataHandler:
             ax.set_title(f"{dt.day}/{dt.month}/{dt.year}\n{product.uuid}", fontsize=10)
             ax.axes.xaxis.set_visible(False)
             ax.axes.yaxis.set_visible(False)
-            band_raster = self.get_farm_raster_from_product_raster_path(farm_name, product[band_to_display])
+            band_raster = self.get_farm_raster_from_product_raster_path(field_id, product[band_to_display])
             if band_raster:
                 with rasterio.open(band_raster, "r") as src:
                     plot.show(src, ax=ax, cmap="terrain")
             return product
 
-        filtered_products_df.apply(_add_band_image_to_grid, band_to_display=band, farm_name=farm_name, axis=1)
+        filtered_products_df.apply(_add_band_image_to_grid, band_to_display=band, field_id=field_id, axis=1)
 
-        farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/{farm_name}"
+        farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/{field_id}"
 
         os.makedirs(farm_name_dir, exist_ok=True)
 
@@ -910,7 +939,7 @@ class CropDataHandler:
 
             """
             scene_classification_raster = self.get_farm_raster_from_product_raster_path(
-                farm["Name"], default_scene_classification_path
+                farm["field_id"], default_scene_classification_path
             )
             if scene_classification_raster:
                 with rasterio.open(scene_classification_raster, "r") as src:
@@ -928,6 +957,10 @@ class CropDataHandler:
         return farm
 
     def add_cloud_free_products_to_farms_df(self):
+        """
+        Add a list of cloud free product uuids for each farm
+        :return:
+        """
 
         if not os.path.exists(FARMS_GEOJSON_VALID_PRODUCTS):
             self.farm_bounds_32643 = self.farm_bounds_32643.apply(self.set_cloud_free_products, axis=1)
@@ -957,7 +990,7 @@ class CropDataHandler:
         # Get the farm
         farm_details = self.get_farm_from_dataframe(farm_df_index)
 
-        farm_name = farm_details["name"]
+        field_id = farm_details["field_id"]
 
         # If we have a situation where we've not yet downloaded all the products in the dataframe, we filter out those
         # where we haven't got the desired band
@@ -965,11 +998,11 @@ class CropDataHandler:
         filtered_products_df = self.products_df[self.products_df[BAND_SCL_20M].notnull()]
 
         true_colour_rasters = [
-            self.get_farm_raster_from_product_raster_path(farm_name, band)
+            self.get_farm_raster_from_product_raster_path(field_id, band)
             for band in filtered_products_df[BAND_TCI_10M]
         ]
         scene_classification_rasters = [
-            self.get_farm_raster_from_product_raster_path(farm_name, band)
+            self.get_farm_raster_from_product_raster_path(field_id, band)
             for band in filtered_products_df[BAND_SCL_20M]
         ]
 
@@ -986,7 +1019,7 @@ class CropDataHandler:
         # gs = gridspec.GridSpec(rows, cols, wspace=0.01,figure=fig)
         gs = gridspec.GridSpec(rows, cols, wspace=1, figure=fig)
         # gridspec.GridSpec(1, 2, figure=fig)
-        fig.suptitle(f"Farm {farm_df_index}: {farm_name.capitalize()} true colour images, all products", fontsize=40)
+        fig.suptitle(f"Farm {farm_df_index}: {field_id} true colour images, all products", fontsize=40)
 
         for n in range(number_of_raster):
 
@@ -1066,10 +1099,10 @@ class CropDataHandler:
         raster_file_path = f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/all_farms/{raster_file_path.parent.name}/{raster_file_path.name}"
         return raster_file_path
 
-    def get_farm_raster_from_product_raster_path(self, farm_name: str, raster_path: str) -> str:
+    def get_farm_raster_from_product_raster_path(self, field_id: str, raster_path: str) -> str:
         """
         Given a farm name and a band path from an original product, construct a path to the farm raster for this band
-        :param farm_name:
+        :param field_id:
         :param raster_path:
         :return:
         """
@@ -1082,7 +1115,7 @@ class CropDataHandler:
         raster_file_path = Path(raster_path).with_suffix(".tif")
         # Construct path to raster band that has been cropped for specified farm
         raster_file_path = (
-            f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/{farm_name}/"
+            f"{raster_file_path.parent.parent.parent}/IMG_DATA_CROPPED/{field_id}/"
             f"{raster_file_path.parent.name}/{raster_file_path.name}"
         )
         return raster_file_path if os.path.exists(raster_file_path) else None
@@ -1153,16 +1186,16 @@ class CropDataHandler:
                 # test = rowcol(aff, left, top)
                 # print(test)
 
-    def generate_ndvi(self, product, farm_name):
+    def generate_ndvi(self, product, field_id):
         """
         Calculate the NDVI for a farm for the specified product. Save the results as a raster
         :param product:
-        :param farm_name:
+        :param field_id:
         :return:
         """
 
-        red_path = self.get_farm_raster_from_product_raster_path(farm_name, product[BAND_4_10M])
-        nir_path = self.get_farm_raster_from_product_raster_path(farm_name, product[BAND_8_10M])
+        red_path = self.get_farm_raster_from_product_raster_path(field_id, product[BAND_4_10M])
+        nir_path = self.get_farm_raster_from_product_raster_path(field_id, product[BAND_8_10M])
 
         if red_path and nir_path:
 
@@ -1174,7 +1207,11 @@ class CropDataHandler:
 
             # Allow division by zero
             np.seterr(divide="ignore", invalid="ignore")
-            ndvi = (nir_band.astype(float) - red_band.astype(float)) / (nir_band + red_band)
+            ndvi = (nir_band.astype(float) - red_band.astype(float)) / (
+                nir_band.astype(float) + red_band.astype(float)
+            )
+            # ep.plot_bands(ndvi, cmap="YlGnBu", cols=1, title="ndvi", vmin=-1, vmax=1)
+
             # plt.imshow(ndvi)
             # plt.show()
             # vmin, vmax = np.nanpercentile(ndvi, (1,99))
@@ -1202,16 +1239,16 @@ class CropDataHandler:
 
         return product
 
-    def generate_ndwi(self, product, farm_name):
+    def generate_ndwi(self, product, field_id):
         """
         Calculate the NDWI(Normalised Difference Water Index) for a farm for the specified product. Save the results as a raster
         :param product:
-        :param farm_name:
+        :param field_id:
         :return:
         """
 
-        green_path = self.get_farm_raster_from_product_raster_path(farm_name, product[BAND_3_10M])
-        nir_path = self.get_farm_raster_from_product_raster_path(farm_name, product[BAND_8_10M])
+        green_path = self.get_farm_raster_from_product_raster_path(field_id, product[BAND_3_10M])
+        nir_path = self.get_farm_raster_from_product_raster_path(field_id, product[BAND_8_10M])
 
         if green_path and nir_path:
 
@@ -1226,7 +1263,9 @@ class CropDataHandler:
             # Calculate NDVI
             # ndvi = (b4.astype(float) - b3.astype(float)) / (b4 + b3)
             # https://custom-scripts.sentinel-hub.com/custom-scripts/sentinel-2/ndwi/
-            ndwi = (green_band.astype(float) - nir_band.astype(float)) / (green_band + nir_band)
+            ndwi = (green_band.astype(float) - nir_band.astype(float)) / (
+                green_band.astype(float) + nir_band.astype(float)
+            )
             # plt.imshow(ndvi)
             # plt.show()
             # vmin, vmax = np.nanpercentile(ndvi, (1,99))
@@ -1263,13 +1302,13 @@ class CropDataHandler:
         """
         farm_details = self.get_farm_from_dataframe(farm_df_index)
 
-        farm_name = farm_details["Name"]
+        field_id = farm_details["field_id"]
 
         # Filter out other areas
         filtered_products_df = self.products_df[self.products_df.geometry.contains(farm_details.geometry)]
         filtered_products_df.reset_index(inplace=True)
 
-        filtered_products_df.apply(analysis_func, farm_name=farm_name, axis=1)
+        filtered_products_df.apply(analysis_func, field_id=field_id, axis=1)
 
     def generate_all_farms_ndvi_rasters(self):
         """
@@ -1313,7 +1352,7 @@ class CropDataHandler:
     "--sentinel_date_range",
     required=True,
     type=(str, str),
-    default=("20210401", "20220401"),
+    default=("20210401", "20220430"),
     help='Specify the date window to get sentinel data. Default is ("20210401", "20220401").'
     " Has to be combined with -d flag to start download",
 )

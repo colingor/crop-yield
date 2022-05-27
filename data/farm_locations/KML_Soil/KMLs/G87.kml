@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>sithanna.kmz</name>
+	<Style id="AREA_FF00FF005">
+		<LineStyle>
+			<color>ff00ff00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8000ff00</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>sithanna</name>
+		<visibility>0</visibility>
+		<description>13-4-22</description>
+		<styleUrl>#AREA_FF00FF005</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.9593096524477,15.12647294036946,0 76.9590400904417,15.12651177951006,0 76.95885132998228,15.12652116563465,0 76.95873834192753,15.12653993788255,0 76.95866424590349,15.12649333091916,0 76.9585931673646,15.12633570868231,0 76.95854656398296,15.12612241680353,0 76.9585395231843,15.12576606676696,0 76.95869978517294,15.1258777296494,0 76.95885132998228,15.12592466040853,0 76.9589676707983,15.12603049732373,0 76.95908535271883,15.12606318700245,0 76.95923991501331,15.12614733862744,0 76.9593096524477,15.12647294036946,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

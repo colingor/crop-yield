@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>k Basanna.kmz</name>
+	<Style id="AREA_FF22EE225">
+		<LineStyle>
+			<color>ff22ee22</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8022ee22</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>k Basanna</name>
+		<visibility>0</visibility>
+		<description>8861069138</description>
+		<styleUrl>#AREA_FF22EE225</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7305348,15.2441622,0 76.7305198,15.2441465,0 76.7305071,15.2440887,0 76.73049899999999,15.244074,0 76.73045089999999,15.2437475,0 76.7302772,15.242833,0 76.7302392,15.2425309,0 76.73024169999999,15.2425163,0 76.7302317,15.2424423,0 76.73024030000001,15.2424329,0 76.7302615,15.2424339,0 76.7304572,15.2423953,0 76.7306854,15.2424017,0 76.73068019999999,15.2424149,0 76.73067949999999,15.2424313,0 76.7306993,15.2425048,0 76.7307248,15.2427251,0 76.7309202,15.2438158,0 76.73097009999999,15.2440519,0 76.7309496,15.2441066,0 76.7309242,15.2441282,0 76.7309058,15.2441371,0 76.7308475,15.2441473,0 76.73049709999999,15.2441605,0 76.7305532,15.2441598,0 76.7305348,15.2441622,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Yemunama.kmz</name>
+	<Style id="AREA_FF22EE223">
+		<LineStyle>
+			<color>ff22ee22</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8022ee22</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Yemunama</name>
+		<visibility>0</visibility>
+		<open>1</open>
+		<description>9972603959(410a)</description>
+		<styleUrl>#AREA_FF22EE223</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.71321829999999,15.2554006,0 76.7122122,15.2554326,0 76.712065,15.2534521,0 76.71300979999999,15.2534763,0 76.71321829999999,15.2554006,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

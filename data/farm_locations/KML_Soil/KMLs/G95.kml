@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>thimmappa.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>thimmappa</name>
+		<visibility>0</visibility>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7317698,15.2467232,0 76.7315284,15.2467229,0 76.7312709,15.2467139,0 76.7310755,15.2467051,0 76.73090449999999,15.2467585,0 76.7307093,15.2467459,0 76.7305377,15.2467549,0 76.7304113,15.2467976,0 76.7302524,15.2468297,0 76.7302091,15.2467963,0 76.73014740000001,15.2465676,0 76.73014879999999,15.2464593,0 76.730017,15.246292,0 76.72996500000001,15.2459792,0 76.7301709,15.2459585,0 76.7303342,15.2458725,0 76.7305236,15.2458524,0 76.73068050000001,15.2458444,0 76.73076500000001,15.2458327,0 76.73085519999999,15.2458272,0 76.7309601,15.2458434,0 76.7311033,15.2458259,0 76.7311009,15.2458822,0 76.73122600000001,15.2457547,0 76.73129640000001,15.245734,0 76.7315777,15.2457269,0 76.7317007,15.2460164,0 76.73171650618315,15.24626907445208,0 76.7317121475935,15.24628460129466,0 76.7317752,15.2464493,0 76.7317698,15.2467232,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

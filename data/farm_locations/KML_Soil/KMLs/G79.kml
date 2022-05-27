@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Sharanappa k.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Sharanappa k</name>
+		<visibility>0</visibility>
+		<description>9535890085</description>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7396002,15.2430209,0 76.7396329,15.2430054,0 76.7397591,15.2429901,0 76.7397749,15.2429929,0 76.7398886,15.2429672,0 76.7400372,15.2429633,0 76.7400473,15.2429798,0 76.74006230000001,15.2430317,0 76.7400985,15.243068,0 76.7401351,15.2431356,0 76.74013770000001,15.2431541,0 76.7401304,15.2431623,0 76.7401188,15.243166,0 76.74006369999999,15.24316,0 76.740048,15.2431547,0 76.73976570000001,15.2431444,0 76.7397136,15.243158,0 76.73970540000001,15.2431626,0 76.7396141,15.2431798,0 76.7395751,15.2431769,0 76.7395408,15.2431895,0 76.73950929999999,15.2431729,0 76.739383,15.2431433,0 76.73937069999999,15.2431329,0 76.7393701,15.2431222,0 76.7393864,15.2430799,0 76.7394312,15.2430279,0 76.73944710000001,15.2430163,0 76.7394737,15.2430097,0 76.73948729999999,15.2430159,0 76.7395186,15.2430162,0 76.73954259999999,15.2430202,0 76.73957830000001,15.2430163,0 76.7395878,15.243019,0 76.7396002,15.2430209,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

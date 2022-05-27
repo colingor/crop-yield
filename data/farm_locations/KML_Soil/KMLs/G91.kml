@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>sureppa.kmz</name>
+	<Style id="AREA_FF00FF00">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<StyleMap id="AREA_FF00FF000">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#AREA_FF00FF001</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#AREA_FF00FF00</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="AREA_FF00FF001">
+		<LineStyle>
+			<color>ffffaa00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>80ff5500</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>sureppa</name>
+		<visibility>0</visibility>
+		<styleUrl>#AREA_FF00FF000</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7315784,15.2451007,0 76.7315231,15.2449111,0 76.73157032579184,15.24470021048761,0 76.73156400000001,15.2446928,0 76.73149789999999,15.2445162,0 76.7314848,15.2444673,0 76.7314825,15.2444178,0 76.7314899,15.2443599,0 76.7314741,15.2443149,0 76.7314674,15.2443069,0 76.73144430000001,15.2442153,0 76.73145359999999,15.2441856,0 76.7314466,15.2441419,0 76.731461,15.2440895,0 76.7314496,15.2440539,0 76.7318214,15.2440332,0 76.7320149,15.2439294,0 76.73221770000001,15.2439264,0 76.73239909999999,15.2439028,0 76.73254660000001,15.2439028,0 76.73273709999999,15.2439129,0 76.73288359999999,15.2439303,0 76.73310720000001,15.2438317,0 76.7332092,15.2442021,0 76.73322520000001,15.2442852,0 76.7332356,15.2443864,0 76.7332356,15.2445569,0 76.7332356,15.2447491,0 76.73330300000001,15.2449169,0 76.7328511,15.2449376,0 76.7326757,15.2449645,0 76.7325068,15.2449554,0 76.7323099,15.2449794,0 76.73210109999999,15.2450001,0 76.7318429,15.2449852,0 76.7315784,15.2451007,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

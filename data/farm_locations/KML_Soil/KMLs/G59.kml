@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>Parvathi.kmz</name>
+	<Style id="AREA_FF22EE221">
+		<LineStyle>
+			<color>ff22ee22</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8022ee22</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>Parvathi</name>
+		<visibility>0</visibility>
+		<open>1</open>
+		<description>9731973139</description>
+		<styleUrl>#AREA_FF22EE221</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.7146077,15.2586213,0 76.71214980000001,15.2588215,0 76.71214070000001,15.2584036,0 76.7145919,15.2582073,0 76.7146077,15.2586213,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

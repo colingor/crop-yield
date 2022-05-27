@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>chandru nayaka.kmz</name>
+	<Style id="AREA_FF00FF006">
+		<LineStyle>
+			<color>ff00ff00</color>
+			<width>2</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>8000ff00</color>
+		</PolyStyle>
+	</Style>
+	<Placemark>
+		<name>chandru nayaka</name>
+		<visibility>0</visibility>
+		<description>13-4-22</description>
+		<styleUrl>#AREA_FF00FF006</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						76.9620492,15.1273766,0 76.9616894,15.1273484,0 76.96155829999999,15.1273164,0 76.96133140000001,15.1273187,0 76.96113389999999,15.1272413,0 76.9609646,15.1272051,0 76.9609116,15.127063,0 76.9609579,15.1267345,0 76.9608922,15.1265532,0 76.9610672,15.1266092,0 76.9612472,15.1265584,0 76.96135820000001,15.1265315,0 76.961506,15.1264898,0 76.9616123,15.1264982,0 76.9618943,15.1263836,0 76.9619127,15.1266309,0 76.9619701,15.1268474,0 76.9619677,15.1271038,0 76.9620492,15.1273766,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>
