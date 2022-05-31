@@ -156,10 +156,13 @@ class CropDataHandler:
             FARMS_XLSX,
             sheet_name="Farms identified by FieldID",
             header=[1],
-            usecols=("field_id", "farm_name", "field_boundary"),
+            usecols=("field_id", "farm_name", "field_boundary", "Date of survey"),
         )
         g_num_df = pd.read_excel(
-            FARMS_XLSX, sheet_name="Farms identified by G no", header=[1], usecols=("Sl.No", "Farmer name")
+            FARMS_XLSX,
+            sheet_name="Farms identified by G no",
+            header=[1],
+            usecols=("Sl.No", "Farmer name", "Date of survey"),
         )
 
         self._sanitize_dataframe_column_headers(field_id_farms_df)
@@ -207,12 +210,25 @@ class CropDataHandler:
         fields_df.reset_index(drop=True, inplace=True)
         fields_df.rename(columns={"field_boundary": "geometry"}, inplace=True)
 
+        # Read in soil test results and match to farms
+        soil_df = pd.read_excel(
+            FARMS_XLSX,
+            sheet_name="Soil test results",
+        )
+        self._sanitize_dataframe_column_headers(soil_df)
+        soil_df.rename(columns={"field_ids": "field_id"}, inplace=True)
+        # Remove duplicate - we already have this as farm_name
+        soil_df.drop("farmer_name", axis=1, inplace=True)
+
+        fields_df = pd.merge(fields_df, soil_df, on="field_id", how="left")
+        fields_df["date_of_survey"] = pd.to_datetime(fields_df["date_of_survey"])
+        # d.strftime("%d/%m/%Y")
         self.farm_bounds_32643 = gpd.GeoDataFrame(fields_df, geometry="geometry")
         self.farm_bounds_32643.set_crs(epsg=4326, inplace=True)
-        self.farm_bounds_32643.to_file(FARMS_GEOJSON, driver="GeoJSON")
 
         self.farm_bounds_32643 = self.farm_bounds_32643.to_crs({"init": "epsg:32643"})
-        self.farm_bounds_32643.to_file(INDIVIDUAL_BOUNDS_SHAPEFILE)
+        # Save subset of fields to shapfile - can't save date
+        self.farm_bounds_32643[['field_id', "farm_name", "geometry"]].to_file(INDIVIDUAL_BOUNDS_SHAPEFILE)
 
         # Save overall bounding box in desired projection
         self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
@@ -223,6 +239,7 @@ class CropDataHandler:
         # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
         # It seems rasterio won't work with 3D geometry
         self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
+        self.farm_bounds_32643.to_file(FARMS_GEOJSON, driver="GeoJSON")
 
     def _sanitize_dataframe_column_headers(self, dataframe: DataFrame):
         """
@@ -1186,6 +1203,23 @@ class CropDataHandler:
                 # test = rowcol(aff, left, top)
                 # print(test)
 
+    def generate_band_histogram(self, product, field_id):
+        def _open_band(band):
+            with rasterio.open(band) as f:
+                return f.read(1)
+
+        arrs = [
+            _open_band(self.get_farm_raster_from_product_raster_path(field_id, product[band]))
+            for band in (BAND_2_10M, BAND_3_10M, BAND_4_10M, BAND_8_10M)
+        ]
+
+        sentinel_img = np.array(arrs, dtype=arrs[0].dtype)
+        show(sentinel_img[0:3])
+        rasterio.plot.show_hist(
+            sentinel_img, bins=50, histtype="stepfilled", lw=0.0, stacked=False, alpha=0.3, title="10m bands"
+        )
+        log.debug("here")
+
     def generate_ndvi(self, product, field_id):
         """
         Calculate the NDVI for a farm for the specified product. Save the results as a raster
@@ -1321,6 +1355,13 @@ class CropDataHandler:
             for farm_index in range(len(self.farm_bounds_32643))
         ]
 
+    def generate_all_farms_band_histograms(self):
+
+        [
+            self.apply_raster_generation_function(farm_index, self.generate_band_histogram)
+            for farm_index in range(len(self.farm_bounds_32643))
+        ]
+
     def generate_all_farms_ndwi_rasters(self):
         """
         Generate ndwi rasters for all farms in appropriate products
@@ -1389,6 +1430,9 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, n
 
     if ndwi:
         crop_data_handler.generate_all_farms_ndwi_rasters()
+
+    # Generate band distribution histograms
+    # crop_data_handler.generate_all_farms_band_histograms()
 
     # if farm_summaries_all:
     #     crop_data_handler.generate_all_farms_bands_summary()
