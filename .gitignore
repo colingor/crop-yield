@@ -5,6 +5,7 @@
 logs/*
 data/sentinel2/*
 data/farm_locations/all_farms_27_03_22.geojson
+data/farm_locations/*.geojson
 data/farm_locations/all_farms_27_03_22.kml
 data/farm_locations/individual_farm_bounds.cpg
 data/farm_locations/individual_farm_bounds.dbf
