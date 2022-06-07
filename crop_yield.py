@@ -42,6 +42,9 @@ BAND_4_10M = "B04_10m"
 BAND_8_10M = "B08_10m"
 BAND_TCI_10M = "TCI_10m"
 
+BAND_2_20M = "B02_20m"
+BAND_3_20M = "B03_20m"
+BAND_4_20M = "B04_20m"
 BAND_5_20M = "B05_20m"
 BAND_6_20M = "B06_20m"
 BAND_7_20M = "B07_20m"
@@ -51,9 +54,17 @@ BAND_12_20M = "B12_20m"
 BAND_SCL_20M = "SCL_20m"
 BAND_TCI_20M = "TCI_20m"
 
-BAND_01_60M = "B01_60m"
-BAND_09_60M = "B09_60m"
-BAND_10_60M = "B10_60m"  # https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/processing-levels/level-2 (the cirrus band 10 is omitted, as it does not contain surface information)
+BAND_1_60M = "B01_60m"
+BAND_2_60M = "B02_60m"
+BAND_3_60M = "B03_60m"
+BAND_4_60M = "B04_60m"
+BAND_5_60M = "B05_60m"
+BAND_6_60M = "B06_60m"
+BAND_7_60M = "B07_60m"
+BAND_8A_60M = "B8A_60m"
+BAND_9_60M = "B09_60m"
+BAND_11_60M = "B11_60m"
+BAND_12_60M = "B12_60m"
 BAND_SCL_60M = "SCL_60m"
 
 ALL_BANDS = (
@@ -61,18 +72,29 @@ ALL_BANDS = (
     BAND_3_10M,
     BAND_4_10M,
     BAND_8_10M,
+    BAND_TCI_10M,
+    BAND_2_20M,
+    BAND_3_20M,
+    BAND_4_20M,
     BAND_5_20M,
     BAND_6_20M,
     BAND_7_20M,
     BAND_8A_20M,
     BAND_11_20M,
     BAND_12_20M,
-    BAND_01_60M,
-    BAND_09_60M,
-    BAND_10_60M,
-    BAND_TCI_10M,
     BAND_SCL_20M,
     BAND_TCI_20M,
+    BAND_1_60M,
+    BAND_2_60M,
+    BAND_3_60M,
+    BAND_4_60M,
+    BAND_5_60M,
+    BAND_6_60M,
+    BAND_7_60M,
+    BAND_8A_60M,
+    BAND_9_60M,
+    BAND_11_60M,
+    BAND_12_60M,
     BAND_SCL_60M,
 )
 
@@ -216,7 +238,21 @@ class CropDataHandler:
             sheet_name="Soil test results",
         )
         self._sanitize_dataframe_column_headers(soil_df)
-        soil_df.rename(columns={"field_ids": "field_id"}, inplace=True)
+        soil_df.rename(
+            columns={
+                "field_ids": "field_id",
+                "o.c._(1_=_low;_2_=_med;_3_=_high)": "carbon_rating",
+                "n(1_=_low;_2_=_med;_3_=_high)": "nitrogen_rating",
+                "p_(1_=_low;_5_=_high)": "phosphorus_rating",
+                "k_(1_=_low;_2_=_med;_3_=_high)": "potassium_rating",
+            },
+            inplace=True,
+        )
+        soil_df["carbon_rating"] = soil_df["carbon_rating"].fillna(0).astype(np.int64)
+        soil_df["nitrogen_rating"] = soil_df["nitrogen_rating"].fillna(0).astype(np.int64)
+        soil_df["phosphorus_rating"] = soil_df["phosphorus_rating"].fillna(0).astype(np.int64)
+        soil_df["potassium_rating"] = soil_df["potassium_rating"].fillna(0).astype(np.int64)
+
         # Remove duplicate - we already have this as farm_name
         soil_df.drop("farmer_name", axis=1, inplace=True)
 
@@ -225,10 +261,12 @@ class CropDataHandler:
         # d.strftime("%d/%m/%Y")
         self.farm_bounds_32643 = gpd.GeoDataFrame(fields_df, geometry="geometry")
         self.farm_bounds_32643.set_crs(epsg=4326, inplace=True)
+        # Save with 4326 for sentinel api
+        self.farm_bounds_32643.to_file(FARMS_GEOJSON, driver="GeoJSON")
 
         self.farm_bounds_32643 = self.farm_bounds_32643.to_crs({"init": "epsg:32643"})
-        # Save subset of fields to shapfile - can't save date
-        self.farm_bounds_32643[['field_id', "farm_name", "geometry"]].to_file(INDIVIDUAL_BOUNDS_SHAPEFILE)
+        # Save subset of fields to shapefile - can't save date
+        self.farm_bounds_32643[["field_id", "farm_name", "geometry"]].to_file(INDIVIDUAL_BOUNDS_SHAPEFILE)
 
         # Save overall bounding box in desired projection
         self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
@@ -239,7 +277,6 @@ class CropDataHandler:
         # Update the geometry in farms datafile to make it 2D so rasterio can handle it.
         # It seems rasterio won't work with 3D geometry
         self.farm_bounds_32643.geometry = self.convert_3D_2D(self.farm_bounds_32643.geometry)
-        self.farm_bounds_32643.to_file(FARMS_GEOJSON, driver="GeoJSON")
 
     def _sanitize_dataframe_column_headers(self, dataframe: DataFrame):
         """
@@ -255,12 +292,7 @@ class CropDataHandler:
         """
 
         if os.path.exists(FARMS_GEOJSON_VALID_PRODUCTS):
-            self.farm_bounds_32643 = gpd.read_file(FARMS_GEOJSON_VALID_PRODUCTS)
-            # Hack to convert string to list and Fiona won't serialize list
-            self.farm_bounds_32643["cloud_free_products"] = self.farm_bounds_32643["cloud_free_products"].apply(
-                lambda x: x.split()
-            )
-            self.total_bbox_32643 = shapely.geometry.box(*self.farm_bounds_32643.total_bounds, ccw=True)
+            self.load_farms_with_valid_products()
         else:
             self.parse_excel_and_kml_farms()
 
@@ -292,6 +324,31 @@ class CropDataHandler:
                 # We don't have to do anything to this geometry
                 new_geo.append(p)
         return new_geo
+
+    def save_farms_with_valid_products(self):
+        """
+        Save farms df to geojson. List of valid products has to be converted to a string to serialize
+        :return:
+        """
+
+        # Copy as we don't want to make changes to the instance version, only the version we are serialising
+        copied_farm_bounds = self.farm_bounds_32643.copy(deep=True)
+        copied_farm_bounds["cloud_free_products"] = copied_farm_bounds["cloud_free_products"].apply(
+            lambda x: " ".join(x)
+        )
+        copied_farm_bounds.to_file(FARMS_GEOJSON_VALID_PRODUCTS, driver="GeoJSON")
+
+    def load_farms_with_valid_products(self):
+        """
+        Load farms dataframe from geojson. Convert valid products back into list
+        :return:
+        """
+        self.farm_bounds_32643 = gpd.read_file(FARMS_GEOJSON_VALID_PRODUCTS)
+
+        # Convert back to list
+        self.farm_bounds_32643["cloud_free_products"] = self.farm_bounds_32643["cloud_free_products"].apply(
+            lambda x: x.split()
+        )
 
     def configure_api(
         self,
@@ -856,20 +913,22 @@ class CropDataHandler:
         farm_details = self.get_farm_from_dataframe(farm_df_index)
 
         field_id = farm_details["field_id"]
+        filtered_products_df = self.load_farm_cloud_free_products_df(farm_details)
 
-        if filter_clouds:
-            filtered_products_df = self.get_cloud_free_products_for_farm(band, farm_details)
-        else:
-            filtered_products_df = self.products_df[self.products_df[band].notnull()]
+        # FIXME : We are only doing cloud free products now
+        # if filter_clouds:
+        #     filtered_products_df = self.get_cloud_free_products_for_farm(band, farm_details)
+        # else:
+        #     filtered_products_df = self.products_df[self.products_df[band].notnull()]
 
-        # Filter products for areas other than this farm
-        filtered_products_df = filtered_products_df[filtered_products_df.geometry.contains(farm_details.geometry)]
-
-        try:
-            filtered_products_df.reset_index(inplace=True)
-        except ValueError:
-            # Ignore - this can arise if reset_index has already been called as it is in get_cloud_free_products_for_farm
-            pass
+        # # Filter products for areas other than this farm
+        # filtered_products_df = filtered_products_df[filtered_products_df.geometry.contains(farm_details.geometry)]
+        #
+        # try:
+        #     filtered_products_df.reset_index(inplace=True)
+        # except ValueError:
+        #     # Ignore - this can arise if reset_index has already been called as it is in get_cloud_free_products_for_farm
+        #     pass
 
         number_of_raster = len(filtered_products_df)
 
@@ -881,7 +940,7 @@ class CropDataHandler:
         fig = plt.figure(figsize=(24, 24))
         fig.suptitle(f"Farm {farm_df_index}: {field_id} {band}, all products", fontsize=40)
 
-        def _add_band_image_to_grid(product, band_to_display, field_id):
+        def _add_band_image_to_grid(product, band_to_display):
             index = product.name
             ax = fig.add_subplot(gs[index])
 
@@ -891,13 +950,13 @@ class CropDataHandler:
             ax.set_title(f"{dt.day}/{dt.month}/{dt.year}\n{product.uuid}", fontsize=10)
             ax.axes.xaxis.set_visible(False)
             ax.axes.yaxis.set_visible(False)
-            band_raster = self.get_farm_raster_from_product_raster_path(field_id, product[band_to_display])
-            if band_raster:
-                with rasterio.open(band_raster, "r") as src:
-                    plot.show(src, ax=ax, cmap="terrain")
+
+            with rasterio.open(product[band_to_display], "r") as src:
+                plot.show(src, ax=ax, cmap="terrain")
+
             return product
 
-        filtered_products_df.apply(_add_band_image_to_grid, band_to_display=band, field_id=field_id, axis=1)
+        filtered_products_df.apply(_add_band_image_to_grid, band_to_display=band, axis=1)
 
         farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/{field_id}"
 
@@ -981,20 +1040,9 @@ class CropDataHandler:
 
         if not os.path.exists(FARMS_GEOJSON_VALID_PRODUCTS):
             self.farm_bounds_32643 = self.farm_bounds_32643.apply(self.set_cloud_free_products, axis=1)
-
-            # Hack here to convert list to string as bug in Fiona won't serialise this
-            self.farm_bounds_32643["cloud_free_products"] = self.farm_bounds_32643["cloud_free_products"].apply(
-                lambda x: " ".join(x)
-            )
-            self.farm_bounds_32643.to_file(FARMS_GEOJSON_VALID_PRODUCTS, driver="GeoJSON")
+            self.save_farms_with_valid_products()
         else:
-
-            self.farm_bounds_32643 = gpd.read_file(FARMS_GEOJSON_VALID_PRODUCTS)
-
-        # Convert back to list
-        self.farm_bounds_32643["cloud_free_products"] = self.farm_bounds_32643["cloud_free_products"].apply(
-            lambda x: x.split()
-        )
+            self.load_farms_with_valid_products()
 
     def generate_individual_farm_cloud_series_over_time(self, farm_df_index: int, verify_images=False):
         """
@@ -1220,16 +1268,15 @@ class CropDataHandler:
         )
         log.debug("here")
 
-    def generate_ndvi(self, product, field_id):
+    def generate_mean_ndvi(self, product, field_id):
         """
-        Calculate the NDVI for a farm for the specified product. Save the results as a raster
+        Calculate the mean NDVI for a farm for the specified product. Save the results as a raster
         :param product:
-        :param field_id:
-        :return:
+        :return: product Series
         """
 
-        red_path = self.get_farm_raster_from_product_raster_path(field_id, product[BAND_4_10M])
-        nir_path = self.get_farm_raster_from_product_raster_path(field_id, product[BAND_8_10M])
+        red_path = product[BAND_4_10M]
+        nir_path = product[BAND_8_10M]
 
         if red_path and nir_path:
 
@@ -1244,6 +1291,12 @@ class CropDataHandler:
             ndvi = (nir_band.astype(float) - red_band.astype(float)) / (
                 nir_band.astype(float) + red_band.astype(float)
             )
+
+            # Get the mean (discounting nan values)
+            product[f"{field_id}_mean_ndvi"] = np.nanmean(ndvi)
+
+            return product
+
             # ep.plot_bands(ndvi, cmap="YlGnBu", cols=1, title="ndvi", vmin=-1, vmax=1)
 
             # plt.imshow(ndvi)
@@ -1253,15 +1306,15 @@ class CropDataHandler:
             # plt.imshow(ndvi, cmap='Greens', vmin=vmin, vmax=vmax)
             # show(ndvi, cmap="Greens")
 
-            ndvi_raster_path = f"{Path(red_path).parent}/ndvi.tif"
+            # ndvi_raster_path = f"{Path(red_path).parent}/ndvi.tif"
 
-            out_meta.update(dtype=rasterio.float32, count=1)
-            with rasterio.open(
-                ndvi_raster_path,
-                "w",
-                **out_meta,
-            ) as ndvi_out:
-                ndvi_out.write(ndvi, 1)
+            # out_meta.update(dtype=rasterio.float32, count=1)
+            # with rasterio.open(
+            #     ndvi_raster_path,
+            #     "w",
+            #     **out_meta,
+            # ) as ndvi_out:
+            #     ndvi_out.write(ndvi, 1)
 
             # show(ndvi, cmap="Greens")
 
@@ -1273,16 +1326,115 @@ class CropDataHandler:
 
         return product
 
-    def generate_ndwi(self, product, field_id):
+    def generate_band_means_at_soil_test_date(self):
         """
-        Calculate the NDWI(Normalised Difference Water Index) for a farm for the specified product. Save the results as a raster
-        :param product:
-        :param field_id:
+        For each farm, get the mean of each band and store in Farm Series
+        Results are then persisted to filesystem
         :return:
         """
 
-        green_path = self.get_farm_raster_from_product_raster_path(field_id, product[BAND_3_10M])
-        nir_path = self.get_farm_raster_from_product_raster_path(field_id, product[BAND_8_10M])
+        def _calculate_means(farm_details: Series):
+            """
+            Get the mean value of each band and store in farm_details series
+            :param farm_details:
+            :return:
+            """
+            cloud_free_products_df = self.load_farm_cloud_free_products_df(farm_details)
+            survey_date = farm_details["date_of_survey"]
+
+            # Ignore the few fields where we don't have a date
+            if pd.isnull(survey_date):
+                return farm_details
+
+            # Copy the date so we can easily access it later
+            cloud_free_products_df["gen_date"] = cloud_free_products_df["generationdate"]
+
+            # Convert and set date as index
+            cloud_free_products_df["generationdate"] = pd.to_datetime(cloud_free_products_df["generationdate"])
+            cloud_free_products_df = cloud_free_products_df.set_index("generationdate")
+
+            # Get the nearest product
+            nearest_product_index = cloud_free_products_df.index.get_indexer([survey_date], method="nearest")[0]
+            nearest_product = cloud_free_products_df.iloc[nearest_product_index]
+
+            def _mean_from_band(band: str):
+                """
+                Get the mean from the specified band
+                :param band:
+                :return:
+                """
+                with rasterio.open(band) as f:
+                    return np.nanmean(f.read(1))
+
+            def _assign_band_mean_to_farm(band: str):
+                """
+                Update the farm_details series with the mean value from the specified band
+                :param band:
+                :return:
+                """
+                farm_details[band] = _mean_from_band(nearest_product[band])
+
+            # Add bands to farm_details
+            list(map(_assign_band_mean_to_farm, ALL_BANDS))
+
+            # Add mean ndvi
+            red = farm_details[BAND_4_10M]
+            nir = farm_details[BAND_8_10M]
+
+            np.seterr(divide="ignore", invalid="ignore")
+            ndvi = (nir - red) / (nir + red)
+
+            farm_details["mean_ndvi"] = ndvi
+
+            # ndwi
+            # https://en.wikipedia.org/wiki/Normalized_difference_water_index
+            green = farm_details[BAND_3_20M]
+            nir = farm_details[BAND_8A_20M]
+
+            ndwi = (green - nir) / (green + nir)
+
+            farm_details["mean_ndwi"] = ndwi
+
+            # Add the details of the product we used in case we have to inspect it in future
+            farm_details["nearest_product_uuid"] = nearest_product["uuid"]
+            farm_details["nearest_product_generationdate"] = nearest_product["gen_date"]
+
+            return farm_details
+
+        self.farm_bounds_32643 = self.farm_bounds_32643.apply(_calculate_means, axis=1)
+
+        # Save the updated farms list
+        self.save_farms_with_valid_products()
+
+    def perform_analysis(self):
+        """
+        Work in progress - perform some sort of analysis
+        :return:
+        """
+
+        # Convert from geopandas to pandas as plots don't work as expected otherwise
+        fields_df = self.farm_bounds_32643[self.farm_bounds_32643["carbon_rating"] > 0]
+        fields_df = pd.DataFrame(fields_df)
+
+        # Distribution of carbon values
+        fields_df["carbon_rating"].plot(kind="hist")
+
+    def generate_mean_ndwi(self, product):
+        """
+        Calculate the mean NDWI(Normalised Difference Water Index) for a farm for the specified product and add result to product
+        :param product:
+        :return:
+        """
+
+        # FIXME This is incorrect
+        # See https://en.wikipedia.org/wiki/Normalized_difference_water_index
+        # We should be using band 8A (864nm) and band 11 (1610nm)
+        # or band 8A (864nm) and band 12 (2200nm)
+
+        # Don't think we can do this at present until we resample so the bands are at the same resolution
+
+        green_path = product[BAND_3_10M]
+        nir_path = product[BAND_8_10M]
 
         if green_path and nir_path:
 
@@ -1297,9 +1449,14 @@ class CropDataHandler:
             # Calculate NDVI
             # ndvi = (b4.astype(float) - b3.astype(float)) / (b4 + b3)
             # https://custom-scripts.sentinel-hub.com/custom-scripts/sentinel-2/ndwi/
+            # Index = (NIR - MIR)/ (NIR + MIR) using Sentinel-2 Band 8 (NIR) and Band 12 (MIR).
             ndwi = (green_band.astype(float) - nir_band.astype(float)) / (
                 green_band.astype(float) + nir_band.astype(float)
             )
+            # Get the mean (discounting nan values)
+            product["mean_ndwi"] = np.nanmean(ndwi)
+            return product
+
             # plt.imshow(ndvi)
             # plt.show()
             # vmin, vmax = np.nanpercentile(ndvi, (1,99))
@@ -1307,15 +1464,15 @@ class CropDataHandler:
             # plt.imshow(ndvi, cmap='Greens', vmin=vmin, vmax=vmax)
             # show(ndvi, cmap="Greens")
 
-            out_raster_path = f"{Path(green_path).parent}/ndwi.tif"
-
-            out_meta.update(dtype=rasterio.float32, count=1)
-            with rasterio.open(
-                out_raster_path,
-                "w",
-                **out_meta,
-            ) as out:
-                out.write(ndwi, 1)
+            # out_raster_path = f"{Path(green_path).parent}/ndwi.tif"
+            #
+            # out_meta.update(dtype=rasterio.float32, count=1)
+            # with rasterio.open(
+            #     out_raster_path,
+            #     "w",
+            #     **out_meta,
+            # ) as out:
+            #     out.write(ndwi, 1)
 
             # show(ndvi, cmap="Greens")
 
@@ -1327,22 +1484,84 @@ class CropDataHandler:
 
         return product
 
-    def apply_raster_generation_function(self, farm_df_index: int, analysis_func):
+    def load_farm_cloud_free_products_df(self, farm_details: Series):
+        """
+        Load the specified farm products which should be in summaries directory saved as geojson
+        :param farm_details:
+        :return: GeoDataFrame
+        """
+
+        farm_products_path = self.get_farm_cloud_free_products_df_path(farm_details)
+        if not os.path.exists(farm_products_path):
+            sys.exit(
+                f"Exiting as unable to find {farm_products_path}. Please run script with --crop-individual-farms "
+                f"to generate geojson list of cloud free products for each farm"
+            )
+        return gpd.read_file(farm_products_path)
+
+    def get_farm_cloud_free_products_df_path(self, farm_details: Series):
+        """
+        Get path to store cloud free products for specified farm
+        :param farm_details:
+        :return:
+        """
+
+        field_id = farm_details["field_id"]
+        return f"{FARM_SUMMARIES_DIRECTORY}/{field_id}/{field_id}_cloud_free_products.geojson"
+
+    def plot_mean_ndvi(self):
+        def _plot_ndvi(farm_details):
+            cloud_free_products_df = self.load_farm_cloud_free_products_df(farm_details)
+
+            df = pd.DataFrame(cloud_free_products_df)
+            df.plot(x="generationdate", y="mean_ndvi")
+            plt.show()
+
+            cloud_free_products_df["generationdate"] = pd.to_datetime(cloud_free_products_df["generationdate"])
+            cloud_free_products_df.set_index("generationdate", inplace=True)
+            cloud_free_products_df["mean_ndvi"].plot()
+
+            plt.show()
+
+            fig, axs = plt.subplots(figsize=(12, 4))
+            # cloud_free_products_df["mean_ndvi"].plot.area(ax=axs)
+            cloud_free_products_df["mean_ndvi"].plot(ax=axs, x="A", y="B")
+            axs.set_ylabel("Reflectance")
+            fig.suptitle(f"{farm_details['field_id']}:{farm_details['farm_name']}")
+            plt.show()
+
+        self.farm_bounds_32643.apply(_plot_ndvi, axis=1)
+
+    def apply_raster_analysis_function_single_farm(self, farm_details: Series, analysis_func):
         """
         Generic function to apply the specified analysis function for each farm in suitable products
         :param farm_df_index:
         :param analysis_func:
         :return:
         """
-        farm_details = self.get_farm_from_dataframe(farm_df_index)
+        # farm_details = self.get_farm_from_dataframe(farm_df_index)
+        cloud_free_products_df = self.load_farm_cloud_free_products_df(farm_details)
 
         field_id = farm_details["field_id"]
+        updated = cloud_free_products_df.apply(analysis_func, field_id=field_id, axis=1)
 
-        # Filter out other areas
-        filtered_products_df = self.products_df[self.products_df.geometry.contains(farm_details.geometry)]
-        filtered_products_df.reset_index(inplace=True)
+        # Save results
+        updated.to_file(self.get_farm_cloud_free_products_df_path(farm_details), driver="GeoJSON")
 
-        filtered_products_df.apply(analysis_func, field_id=field_id, axis=1)
+        # Add to master products list
+        df = updated[["uuid", f"{field_id}_mean_ndvi"]]
+        self.products_df = pd.merge(self.products_df, df, on="uuid", how="left")
+        self.save_products_df_to_geojson()
+
+    def apply_raster_analysis_function_all_farms(self, analysis_func):
+        """
+        Apply the specified analysis function to all farms
+        :type analysis_func: the analysis to be performed for each farm on cloud free products
+
+        """
+        self.farm_bounds_32643.apply(
+            self.apply_raster_analysis_function_single_farm, analysis_func=analysis_func, axis=1
+        )
 
     def generate_all_farms_ndvi_rasters(self):
         """
@@ -1351,14 +1570,14 @@ class CropDataHandler:
         """
 
         [
-            self.apply_raster_generation_function(farm_index, self.generate_ndvi)
+            self.apply_raster_analysis_function_single_farm(farm_index, self.generate_mean_ndvi)
             for farm_index in range(len(self.farm_bounds_32643))
         ]
 
     def generate_all_farms_band_histograms(self):
 
         [
-            self.apply_raster_generation_function(farm_index, self.generate_band_histogram)
+            self.apply_raster_analysis_function_single_farm(farm_index, self.generate_band_histogram)
             for farm_index in range(len(self.farm_bounds_32643))
         ]
 
@@ -1369,20 +1588,62 @@ class CropDataHandler:
         """
 
         [
-            self.apply_raster_generation_function(farm_index, self.generate_ndwi)
+            self.apply_raster_analysis_function_single_farm(farm_index, self.generate_mean_ndwi)
             for farm_index in range(len(self.farm_bounds_32643))
         ]
+
+    def generate_cloud_free_farm_product_lists(self, force_recreate=False):
+        """
+        Generate a list of valid products for each farm. We can then add metrics such as mean ndvi etc. Save as geojson
+        """
+
+        def _generate_product_list(farm_details):
+            field_id = farm_details["field_id"]
+            farm_name_dir = f"{FARM_SUMMARIES_DIRECTORY}/{field_id}"
+            os.makedirs(farm_name_dir, exist_ok=True)
+
+            farm_products_path = self.get_farm_cloud_free_products_df_path(farm_details)
+
+            if not os.path.exists(farm_products_path) or force_recreate:
+
+                if "cloud_free_products" not in farm_details:
+                    # This adds list of cloud free products to farms df
+                    farm_details = self.set_cloud_free_products(farm_details)
+
+                cloud_free_products_df = self.get_cloud_free_products_for_farm(BAND_4_10M, farm_details)
+
+                def fix_band_paths(product):
+                    def _update_df_bands(band):
+                        product[band] = self.get_farm_raster_from_product_raster_path(field_id, product[band])
+
+                    [_update_df_bands(band) for band in ALL_BANDS]
+                    return product
+
+                cloud_free_products_df = cloud_free_products_df.apply(fix_band_paths, axis=1)
+                cloud_free_products_df.to_file(farm_products_path, driver="GeoJSON")
+            # else:
+            #     cloud_free_products_df = gpd.read_file(farm_products_path)
+
+            return farm_details
+
+        # Save geojson of valid products for each field
+        self.farm_bounds_32643 = self.farm_bounds_32643.apply(_generate_product_list, axis=1)
+        self.save_farms_with_valid_products()
 
 
 @click.command(context_settings=dict(ignore_unknown_options=True))
 @click.option("--download", "-d", is_flag=True, help="Download Sentinel 2 data")
 # @click.option("--crop-all", "-ca", is_flag=True, help="Crop Sentinel 2 rasters to bounds of all farms")
 @click.option(
-    "--crop-individual-farms", "-ci", is_flag=True, help="Crop Sentinel 2 rasters individual farm boundaries"
+    "--crop-individual-farms",
+    "-ci",
+    is_flag=True,
+    help="Crop Sentinel 2 rasters, filter clouds and calculate band means",
 )
 @click.option("--farm_summaries", "-fs", is_flag=True, help="Generate summary jpegs for specified bands over time")
-@click.option("--ndvi", "-ndvi", is_flag=True, help="Generate ndvi tifs for each farm")
-@click.option("--ndwi", "-ndwi", is_flag=True, help="Generate ndwi tifs for each farm")
+@click.option("--farm_analysis", "-fa", is_flag=True, help="Perform analysis on farms dataframe.  In progress")
+# @click.option("--ndvi", "-ndvi", is_flag=True, help="Generate ndvi tifs for each farm")
+# @click.option("--ndwi", "-ndwi", is_flag=True, help="Generate ndwi tifs for each farm")
 # @click.option(
 #     "--farm_summaries_all",
 #     "-fsa",
@@ -1397,7 +1658,7 @@ class CropDataHandler:
     help='Specify the date window to get sentinel data. Default is ("20210401", "20220401").'
     " Has to be combined with -d flag to start download",
 )
-def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, ndvi, ndwi):
+def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, farm_analysis):
     """
     Download and process Sentinel 2 rasters.
 
@@ -1413,6 +1674,7 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, n
     crop_data_handler = CropDataHandler(sentinel_date_range)
 
     if download:
+
         crop_data_handler.download_sentinel_products()
 
     # if crop_all:
@@ -1420,16 +1682,21 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, n
 
     if crop_individual_farms:
         crop_data_handler.crop_rasters_to_individual_fields_bbox()
-        crop_data_handler.add_cloud_free_products_to_farms_df()
+        crop_data_handler.generate_cloud_free_farm_product_lists(force_recreate=True)
+        crop_data_handler.generate_band_means_at_soil_test_date()
 
     if farm_summaries:
-        crop_data_handler.generate_individual_farm_bands_summary(filter_clouds=False)
+        crop_data_handler.generate_individual_farm_bands_summary(filter_clouds=True)
 
-    if ndvi:
-        crop_data_handler.generate_all_farms_ndvi_rasters()
+    if farm_analysis:
+        crop_data_handler.perform_analysis()
 
-    if ndwi:
-        crop_data_handler.generate_all_farms_ndwi_rasters()
+    # if ndvi:
+    #     crop_data_handler.apply_raster_analysis_function_all_farms(crop_data_handler.generate_mean_ndvi)
+    #     crop_data_handler.plot_mean_ndvi()
+    #
+    # if ndwi:
+    #     crop_data_handler.apply_raster_analysis_function_all_farms(crop_data_handler.generate_mean_ndwi)
 
     # Generate band distribution histograms
     # crop_data_handler.generate_all_farms_band_histograms()
