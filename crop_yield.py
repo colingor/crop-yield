@@ -29,6 +29,7 @@ from pyproj import Transformer
 from rasterio import plot
 from rasterio.mask import mask
 from rasterio.plot import show
+from scipy import stats
 from sentinelsat.sentinel import SentinelAPI
 from shapely.geometry import Polygon, MultiPolygon, shape
 
@@ -1415,9 +1416,47 @@ class CropDataHandler:
         # Convert from geopandas to pandas as plots don't work as expected otherwise
         fields_df = self.farm_bounds_32643[self.farm_bounds_32643["carbon_rating"] > 0]
         fields_df = pd.DataFrame(fields_df)
+        fields_df = fields_df.dropna()
 
-        # Distribution of carbon values
-        fields_df["carbon_rating"].plot(kind="hist")
+        import seaborn as sns
+
+        sns.lmplot(x="carbon_rating", y="mean_ndwi", data=fields_df)
+        sns.lmplot(x="mean_ndvi", y="mean_ndwi", data=fields_df)
+        from scipy import stats
+
+        # stats.pearsonr(fields_df['carbon_rating'], ['mean_ndvi'])
+        stats.pearsonr(fields_df["carbon_rating"], fields_df["mean_ndvi"])
+        stats.pearsonr(fields_df["mean_ndwi"], fields_df["mean_ndvi"])
+
+        fields_df.drop(
+            [BAND_SCL_20M, BAND_SCL_60M, "farm_id(from_platform)", BAND_TCI_10M, BAND_TCI_20M], axis=1, inplace=True
+        )
+        # Pearsons coefficient by default
+        cormat = fields_df.corr()
+        r = round(cormat, 2)
+        sns.set(rc={"figure.figsize": (25, 15)})
+        sns.heatmap(r, annot=True, vmax=1, vmin=-1, center=0, cmap="vlag")
+        plt.show()
+
+        # Remove top half to make it easier to read
+        mask = np.triu(np.ones_like(r, dtype=bool))
+        sns.heatmap(r, annot=True, vmax=1, vmin=-1, center=0, cmap="vlag", mask=mask)
+        plt.show()
+        plt.savefig("correlation.png")
+
+        corr_pairs = r.unstack()
+        sorted_pairs = corr_pairs.sort_values(kind="quicksort")
+        log.debug(sorted_pairs)
+
+        negative_pairs = sorted_pairs[sorted_pairs < 0]
+        log.debug(negative_pairs)
+
+        strong_pairs = sorted_pairs[abs(sorted_pairs) > 0.5]
+
+        log.debug(strong_pairs)
+
+        # fields_df["carbon_rating"].plot(kind="hist")
+        # fields_df.plot(y=["mean_ndvi", 'mean_ndwi', 'carbon_rating', 'nitrogen_rating', 'potassium_rating', 'phosphorus_rating'], alpha=0.5, use_index=True)
 
     def generate_mean_ndwi(self, product):
         """
