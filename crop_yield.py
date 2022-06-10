@@ -11,7 +11,7 @@ from logging import handlers
 from pathlib import Path
 from typing import List
 from zipfile import ZipFile
-
+import statsmodels.api as sm
 import click
 import earthpy.plot as ep
 import geopandas as gpd
@@ -30,8 +30,30 @@ from rasterio import plot
 from rasterio.mask import mask
 from rasterio.plot import show
 from scipy import stats
+import seaborn as sns
 from sentinelsat.sentinel import SentinelAPI
 from shapely.geometry import Polygon, MultiPolygon, shape
+from sklearn.datasets import load_boston
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import ConstantKernel, RBF, WhiteKernel
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import PolynomialFeatures
+from statsmodels.regression.process_regression import ProcessMLE
+
+MEAN_NDVI = "mean_ndvi"
+
+MEAN_NDWI = "mean_ndwi"
+
+CARBON_RATING = "carbon_rating"
+
+POTASSIUM_RATING = "potassium_rating"
+
+PHOSPHORUS_RATING = "phosphorus_rating"
+
+NITROGEN_RATING = "nitrogen_rating"
 
 pd.set_option("display.max_columns", None)  # or 1000
 pd.set_option("display.max_rows", None)  # or 1000
@@ -116,11 +138,13 @@ FARMS_GEOJSON_VALID_PRODUCTS = (
     f"{FARM_LOCATIONS_DIRECTORY}/{ALL_FARMS_FILE_NAME_EXCLUDING_PREFIX}_cloud_free_products.geojson"
 )
 INDIVIDUAL_BOUNDS_SHAPEFILE = f"{FARM_LOCATIONS_DIRECTORY}/individual_farm_bounds.shp"
-
+ANALYSIS_RESULTS_DIR = f"{FARM_SUMMARIES_DIRECTORY}/analysis"
 # Scene classification keys
 CLOUD_MEDIUM = 8
 CLOUD_HIGH = 9
 THIN_CIRRUS = 10
+SATURATED_OR_DEFECTIVE = 1
+CLOUD_SHADOWS = 3
 
 # Create logs dir if it doesn't already exist
 os.makedirs("logs", exist_ok=True)
@@ -157,6 +181,7 @@ class CropDataHandler:
         # Ensure directory to store Sentinel2 data exists
         os.makedirs(FARM_SENTINEL_DATA_DIRECTORY, exist_ok=True)
         os.makedirs(FARM_SUMMARIES_DIRECTORY, exist_ok=True)
+        os.makedirs(ANALYSIS_RESULTS_DIR, exist_ok=True)
 
         # Create api instance
         self.configure_api()
@@ -1018,9 +1043,14 @@ class CropDataHandler:
             scene_classification_raster = self.get_farm_raster_from_product_raster_path(
                 farm["field_id"], default_scene_classification_path
             )
+
             if scene_classification_raster:
                 with rasterio.open(scene_classification_raster, "r") as src:
-                    if not any(np.in1d((CLOUD_MEDIUM, CLOUD_HIGH, THIN_CIRRUS), src.read())):
+                    if not any(
+                        np.in1d(
+                            (CLOUD_MEDIUM, CLOUD_HIGH, THIN_CIRRUS, SATURATED_OR_DEFECTIVE, CLOUD_SHADOWS), src.read()
+                        )
+                    ):
                         cloud_free_product_ids.append(uuid)
 
         [
@@ -1354,9 +1384,47 @@ class CropDataHandler:
             cloud_free_products_df["generationdate"] = pd.to_datetime(cloud_free_products_df["generationdate"])
             cloud_free_products_df = cloud_free_products_df.set_index("generationdate")
 
-            # Get the nearest product
-            nearest_product_index = cloud_free_products_df.index.get_indexer([survey_date], method="nearest")[0]
-            nearest_product = cloud_free_products_df.iloc[nearest_product_index]
+            field_id = farm_details["field_id"]
+            # ****************  WARNING *************
+            # Only add field_ids_with_clouds if you understand what is going on here.
+            #
+            # The idea behind this is assuming you have run the perform_analysis endpoint, examine the plots of all
+            # the farms we are going to analyse.  The logic to automatically remove clouds isn't perfect and some cloudy
+            # fields get through. If you specify their ids here, we look for the next nearest product and drop this from
+            # the farm's list of cloud free products.
+            # Running this repeatedly with the same ids will keep removing available products and could mess up the dataset.
+            # Run it once, check the plots and if all have been fixed, set field_ids_with_clouds = []. If there are some
+            # which haven't, keep their ids in the list, run again to select the next nearest product again, check the plot and repeat.
+            # Simple as that ;)
+            # *************************************
+            # field_ids_with_clouds = ('660', '659', '821', '819', '787', '820', '823', 'G044', 'G066', 'G067', 'G082')
+            field_ids_with_clouds = []
+
+            if field_id not in field_ids_with_clouds:
+                # Get the nearest product
+                nearest_product_index = cloud_free_products_df.index.get_indexer([survey_date], method="nearest")[0]
+                nearest_product = cloud_free_products_df.iloc[nearest_product_index]
+            else:
+                # Get next nearest product as manual inspection showed clouds
+
+                # Get what we thought was cloud free
+                nearest_uuid = farm_details["nearest_product_uuid"]
+                # Remove the cloud covered product
+                cloud_free_products_df = cloud_free_products_df[cloud_free_products_df.uuid != nearest_uuid]
+
+                # Get next nearest
+                nearest_product_index = cloud_free_products_df.index.get_indexer([survey_date], method="nearest")[0]
+                nearest_product = cloud_free_products_df.iloc[nearest_product_index]
+
+                # Update this farms' list of cloud free products
+                original_cloud_free_products = farm_details["cloud_free_products"]
+                original_cloud_free_products.remove(nearest_uuid)
+                farm_details["cloud_free_products"] = original_cloud_free_products
+
+                # Update the geojson of cloud free products
+                cloud_free_products_df.to_file(
+                    self.get_farm_cloud_free_products_df_path(farm_details), driver="GeoJSON"
+                )
 
             def _mean_from_band(band: str):
                 """
@@ -1407,32 +1475,69 @@ class CropDataHandler:
         # Save the updated farms list
         self.save_farms_with_valid_products()
 
-    def perform_analysis(self):
+    def _plot_rgb_for_fields_chosen_for_analysis(self):
         """
-        Work in progress - perform some sort of analysis
+        Create a grid of the rgb images of all the fields we have selected for analysis. This is important
+        as we have to manually check there are no cloudy images - some sneak through the automatic detection.
+        NOTE: If you notice any cloudy fields, take a note of the id, look at generate_band_means_at_soil_test_date
+        and amend the field_ids_with_clouds list with the ids. Run generate_band_means_at_soil_test_date on it's own,
+        then call this function to generate another plot of all farms. If some farms are still cloudy, repeat. If all
+        fields are cloud free, remove the ids from field_ids_with_clouds so we don't accidentally remove any products
+        that are don't have any issues
+        """
+        df = self.get_farm_bounds_as_pandas_df_for_analysis()
+        number_of_raster = len(df)
+
+        cols = 4
+        rows = int(math.ceil(number_of_raster / cols))
+
+        gs = gridspec.GridSpec(rows, cols, wspace=0.01)
+
+        fig = plt.figure(figsize=(24, 100))
+        fig.suptitle(f"Farms", fontsize=40)
+
+        def _plot(farm):
+            cloud_free_products_df = self.load_farm_cloud_free_products_df(farm)
+            match = cloud_free_products_df[cloud_free_products_df["uuid"] == farm["nearest_product_uuid"]]
+            index = farm.name
+            ax = fig.add_subplot(gs[index])
+            ax.set_title(f"{farm['field_id']}", fontsize=10)
+            ax.axes.xaxis.set_visible(False)
+            ax.axes.yaxis.set_visible(False)
+
+            with rasterio.open(match[BAND_TCI_10M].iloc[0], "r") as src:
+                plot.show(src, ax=ax, cmap="terrain")
+
+            return farm
+
+        df.apply(_plot, axis=1)
+
+        plt.savefig(f"{ANALYSIS_RESULTS_DIR}/chosen_products.jpg")
+
+        plt.show()
+
+    def _correlation_plots(self, soil_test_columns: list, field: str):
+        """
+        Plot correlation matrices
+        :param soil_test_columns:
+        :param field:
         :return:
         """
 
-        # Convert from geopandas to pandas as plots don't work as expected otherwise
-        fields_df = self.farm_bounds_32643[self.farm_bounds_32643["carbon_rating"] > 0]
-        fields_df = pd.DataFrame(fields_df)
-        fields_df = fields_df.dropna()
+        # Get fresh dataframe
+        df = self.get_farm_bounds_as_pandas_df_for_analysis()
 
-        import seaborn as sns
+        # Discount rows that have 0 for test result as no results were supplied
+        df = df[df[field] > 0]
 
-        sns.lmplot(x="carbon_rating", y="mean_ndwi", data=fields_df)
-        sns.lmplot(x="mean_ndvi", y="mean_ndwi", data=fields_df)
-        from scipy import stats
+        extra_columns = list(set(soil_test_columns) - set([field]))
+        df.drop(extra_columns, axis=1, inplace=True)
 
-        # stats.pearsonr(fields_df['carbon_rating'], ['mean_ndvi'])
-        stats.pearsonr(fields_df["carbon_rating"], fields_df["mean_ndvi"])
-        stats.pearsonr(fields_df["mean_ndwi"], fields_df["mean_ndvi"])
+        sns.lmplot(x=field, y=MEAN_NDWI, data=df)
+        sns.lmplot(x=MEAN_NDVI, y=MEAN_NDWI, data=df)
 
-        fields_df.drop(
-            [BAND_SCL_20M, BAND_SCL_60M, "farm_id(from_platform)", BAND_TCI_10M, BAND_TCI_20M], axis=1, inplace=True
-        )
         # Pearsons coefficient by default
-        cormat = fields_df.corr()
+        cormat = df.corr()
         r = round(cormat, 2)
         sns.set(rc={"figure.figsize": (25, 15)})
         sns.heatmap(r, annot=True, vmax=1, vmin=-1, center=0, cmap="vlag")
@@ -1441,9 +1546,9 @@ class CropDataHandler:
         # Remove top half to make it easier to read
         mask = np.triu(np.ones_like(r, dtype=bool))
         sns.heatmap(r, annot=True, vmax=1, vmin=-1, center=0, cmap="vlag", mask=mask)
-        plt.show()
-        plt.savefig("correlation.png")
 
+        plt.savefig(f"{ANALYSIS_RESULTS_DIR}/{field}_correlation.png")
+        plt.show()
         corr_pairs = r.unstack()
         sorted_pairs = corr_pairs.sort_values(kind="quicksort")
         log.debug(sorted_pairs)
@@ -1455,8 +1560,38 @@ class CropDataHandler:
 
         log.debug(strong_pairs)
 
-        # fields_df["carbon_rating"].plot(kind="hist")
-        # fields_df.plot(y=["mean_ndvi", 'mean_ndwi', 'carbon_rating', 'nitrogen_rating', 'potassium_rating', 'phosphorus_rating'], alpha=0.5, use_index=True)
+        stats.pearsonr(df[field], df[MEAN_NDVI])
+        stats.pearsonr(df[MEAN_NDWI], df[MEAN_NDVI])
+
+    def perform_analysis(self):
+        """
+        Work in progress - perform some sort of analysis
+        """
+
+        self._plot_rgb_for_fields_chosen_for_analysis()
+
+        # Have to treat each individually as we have results for some and not others
+        soil_test_columns = [NITROGEN_RATING, PHOSPHORUS_RATING, POTASSIUM_RATING, CARBON_RATING]
+
+        # Plot correlation matrices for each test field
+        [self._correlation_plots(soil_test_columns, field) for field in soil_test_columns]
+
+    def get_farm_bounds_as_pandas_df_for_analysis(self) -> DataFrame:
+        """
+        Convert to normal dataframe rather than Geopandas as strange issues plotting sometimes
+        Remove some bands that are not required for analysis
+        :return:
+        """
+        # Convert to normal dataframe rather than Geopandas as strange issues plotting sometimes
+        fields_df = pd.DataFrame(self.farm_bounds_32643)
+        # Get rid of bands we don't need for analysis
+        fields_df.drop(
+            [BAND_SCL_20M, BAND_SCL_60M, "farm_id(from_platform)", BAND_TCI_10M, BAND_TCI_20M], axis=1, inplace=True
+        )
+        # Drop any rows that don't have band values
+        fields_df = fields_df[fields_df[BAND_8_10M].notna()]
+        fields_df.to_csv(f"{FARM_SUMMARIES_DIRECTORY}/farms.csv")
+        return fields_df
 
     def generate_mean_ndwi(self, product):
         """
@@ -1645,7 +1780,7 @@ class CropDataHandler:
 
             if not os.path.exists(farm_products_path) or force_recreate:
 
-                if "cloud_free_products" not in farm_details:
+                if "cloud_free_products" not in farm_details or force_recreate:
                     # This adds list of cloud free products to farms df
                     farm_details = self.set_cloud_free_products(farm_details)
 
