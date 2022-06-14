@@ -12,6 +12,20 @@ from pathlib import Path
 from typing import List
 from zipfile import ZipFile
 import statsmodels.api as sm
+from numpy import mean
+from sklearn import model_selection
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.dummy import DummyClassifier
+from sklearn.metrics import (
+    confusion_matrix,
+    classification_report,
+    ConfusionMatrixDisplay,
+    accuracy_score,
+    plot_confusion_matrix,
+    precision_score,
+    recall_score,
+    f1_score,
+)
 import click
 import earthpy.plot as ep
 import geopandas as gpd
@@ -34,13 +48,17 @@ import seaborn as sns
 from sentinelsat.sentinel import SentinelAPI
 from shapely.geometry import Polygon, MultiPolygon, shape
 from sklearn.datasets import load_boston
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor, RandomForestClassifier
+from sklearn.gaussian_process import GaussianProcessRegressor, GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import ConstantKernel, RBF, WhiteKernel
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression, SGDClassifier, LogisticRegression
+from sklearn.metrics import r2_score, confusion_matrix
+from sklearn.model_selection import train_test_split, cross_val_score, RepeatedKFold, StratifiedKFold
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import PolynomialFeatures
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
 from statsmodels.regression.process_regression import ProcessMLE
 
 MEAN_NDVI = "mean_ndvi"
@@ -151,7 +169,7 @@ os.makedirs("logs", exist_ok=True)
 
 file_handler = logging.handlers.RotatingFileHandler("logs/crop.log", maxBytes=2048, backupCount=5)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s: %(levelname)s] %(message)s",
     handlers=[file_handler, logging.StreamHandler()],
 )
@@ -1568,13 +1586,87 @@ class CropDataHandler:
         Work in progress - perform some sort of analysis
         """
 
-        self._plot_rgb_for_fields_chosen_for_analysis()
+        # self._plot_rgb_for_fields_chosen_for_analysis()
+        #
+        # # Have to treat each individually as we have results for some and not others
+        # soil_test_columns = [NITROGEN_RATING, PHOSPHORUS_RATING, POTASSIUM_RATING, CARBON_RATING]
+        #
+        # # Plot correlation matrices for each test field
+        # [self._correlation_plots(soil_test_columns, field) for field in soil_test_columns]
 
-        # Have to treat each individually as we have results for some and not others
-        soil_test_columns = [NITROGEN_RATING, PHOSPHORUS_RATING, POTASSIUM_RATING, CARBON_RATING]
+        # Get the dataframe we want to work with
+        fields_df = self.get_farm_bounds_as_pandas_df_for_analysis()
+        # test_bands = list(set(ALL_BANDS) - set([BAND_SCL_20M, BAND_SCL_60M, BAND_TCI_10M, BAND_TCI_20M]))
 
-        # Plot correlation matrices for each test field
-        [self._correlation_plots(soil_test_columns, field) for field in soil_test_columns]
+        # Probably want to test a subset of bands
+        test_bands = [BAND_8_10M, BAND_2_10M, BAND_4_10M, BAND_3_10M]
+        # test_bands = [MEAN_NDWI, MEAN_NDVI]
+
+        # Specify band - look at carbon rating initialy
+        fields_df = fields_df[fields_df[CARBON_RATING] > 0]
+
+        # Split into test and train. Looking at carbon for the moment
+        x_train, x_test, y_train, y_test = train_test_split(
+            fields_df[[band for band in test_bands]], fields_df[CARBON_RATING], train_size=0.75, shuffle=True
+        )
+
+        results = {}
+
+        def _test_classifiers(x_train, x_test, y_train, y_test):
+            C = 10
+            kernel = 1.0 * RBF([1.0, 1.0])  # for GPC
+
+            # Create different classifiers.
+            classifiers = {
+                "L1 logistic": LogisticRegression(
+                    C=C, penalty="l1", solver="saga", multi_class="multinomial", max_iter=10000
+                ),
+                "L2 logistic (Multinomial)": LogisticRegression(
+                    C=C, penalty="l2", solver="saga", multi_class="multinomial", max_iter=10000
+                ),
+                "L2 logistic (OvR)": LogisticRegression(
+                    C=C, penalty="l2", solver="saga", multi_class="ovr", max_iter=10000
+                ),
+                "logistic": LogisticRegression(solver="liblinear", random_state=0),
+                "Linear SVC": SVC(kernel="linear", C=C, probability=True, random_state=0),  # Needs over 100K samples
+                # "GPC": GaussianProcessClassifier(kernel),
+                " DecisionTreeClassifier": DecisionTreeClassifier(),
+                " DecisionTreeClassifier (entropy)": DecisionTreeClassifier(criterion="entropy", max_depth=3),
+                " RandomForest Classifier": RandomForestClassifier(n_estimators=100),
+                # "Random Forest": RandomForestRegressor(random_state=0),
+                "SDG": SGDClassifier(
+                    max_iter=1000, tol=0.01
+                ),  # Stocastic models can offer different results each time they are run. Their behaviour incorporates elements for randomness.
+                # see https://machinelearningmastery.com/different-results-each-time-in-machine-learning/
+            }
+
+            for index, (name, classifier) in enumerate(classifiers.items()):
+
+                # Can use cross_val_score to get averages
+                scores = cross_val_score(classifier, x_train, y_train, cv=5)
+                log.info(name + " %0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+                classifier = classifier.fit(x_train, y_train)
+
+                log.info(f"{name} coefficient of determination (train): {classifier.score(x_train, y_train)}")
+                log.info(f"{name} coefficient of determination (test): {classifier.score(x_test, y_test)}")
+                y_pred = classifier.predict(x_test)
+                accuracy = accuracy_score(y_test, y_pred)
+                # Maybe we should use the average from scores here
+                results[name] = accuracy
+                log.info("Accuracy for %s: %0.1f%% " % (name, accuracy * 100))
+
+                cm = confusion_matrix(y_test, y_pred)
+                log.info(cm)
+                c = plot_confusion_matrix(classifier, x_test, y_test, cmap="GnBu")
+                c.ax_.set_title(f"{name}, Accuracy {accuracy}")
+                plt.show()
+
+        _test_classifiers(x_train, x_test, y_train, y_test)
+
+        comparison = pd.DataFrame.from_dict(results, orient="index")
+        log.info(comparison)
+        comparison.plot.bar()
+        plt.show()
 
     def get_farm_bounds_as_pandas_df_for_analysis(self) -> DataFrame:
         """
