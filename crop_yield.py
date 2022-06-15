@@ -1670,8 +1670,8 @@ class CropDataHandler:
 
         model_scores_df = pd.DataFrame.from_dict(results, orient="index")
         fig, axs = plt.subplots(figsize=(15, 15))
-        axs.set_ylabel("Classifier model")
-        axs.set_xlabel("Score")
+        axs.set_xlabel("Classifier model")
+        axs.set_ylabel("Score")
         axs.tick_params(axis="both", labelsize=20)
         model_scores_df.plot.bar(ax=axs)
         plt.rcParams.update({"font.size": 20})
