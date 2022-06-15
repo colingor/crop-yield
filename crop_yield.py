@@ -11,21 +11,7 @@ from logging import handlers
 from pathlib import Path
 from typing import List
 from zipfile import ZipFile
-import statsmodels.api as sm
-from numpy import mean
-from sklearn import model_selection
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.dummy import DummyClassifier
-from sklearn.metrics import (
-    confusion_matrix,
-    classification_report,
-    ConfusionMatrixDisplay,
-    accuracy_score,
-    plot_confusion_matrix,
-    precision_score,
-    recall_score,
-    f1_score,
-)
+
 import click
 import earthpy.plot as ep
 import geopandas as gpd
@@ -33,6 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rasterio
+import seaborn as sns
 import shapely
 from dateutil import parser
 from fiona.crs import from_epsg
@@ -44,22 +31,20 @@ from rasterio import plot
 from rasterio.mask import mask
 from rasterio.plot import show
 from scipy import stats
-import seaborn as sns
 from sentinelsat.sentinel import SentinelAPI
 from shapely.geometry import Polygon, MultiPolygon, shape
-from sklearn.datasets import load_boston
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor, RandomForestClassifier
-from sklearn.gaussian_process import GaussianProcessRegressor, GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import ConstantKernel, RBF, WhiteKernel
-from sklearn.linear_model import LinearRegression, SGDClassifier, LogisticRegression
-from sklearn.metrics import r2_score, confusion_matrix
-from sklearn.model_selection import train_test_split, cross_val_score, RepeatedKFold, StratifiedKFold
-from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.linear_model import SGDClassifier, LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    plot_confusion_matrix,
+)
+from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.svm import SVC
+from sklearn.svm import SVC, LinearSVC
 from sklearn.tree import DecisionTreeClassifier
-from statsmodels.regression.process_regression import ProcessMLE
 
 MEAN_NDVI = "mean_ndvi"
 
@@ -1583,7 +1568,7 @@ class CropDataHandler:
         stats.pearsonr(df[field], df[MEAN_NDVI])
         stats.pearsonr(df[MEAN_NDWI], df[MEAN_NDVI])
 
-        sns.pairplot(df[[BAND_8_10M, BAND_2_10M, BAND_4_10M, BAND_3_10M, CARBON_RATING]], diag_kind='kde')
+        sns.pairplot(df[[BAND_8_10M, BAND_2_10M, BAND_4_10M, BAND_3_10M, CARBON_RATING]], diag_kind="kde")
 
     def perform_analysis(self):
         """
@@ -1606,7 +1591,7 @@ class CropDataHandler:
         test_bands = [BAND_8_10M, BAND_2_10M, BAND_4_10M, BAND_3_10M]
         # test_bands = [MEAN_NDWI, MEAN_NDVI]
 
-        # Specify band - look at carbon rating initialy
+        # Specify band - look at carbon rating initially
         fields_df = fields_df[fields_df[CARBON_RATING] > 0]
 
         # Split into test and train. Looking at carbon for the moment
@@ -1620,8 +1605,13 @@ class CropDataHandler:
             C = 10
             kernel = 1.0 * RBF([1.0, 1.0])  # for GPC
 
+            # Linear SVC -> KNeighbours -> SVC
             # Create different classifiers.
             classifiers = {
+                "LinearSVC": LinearSVC(),
+                "KNeighbors": KNeighborsClassifier(),
+                "SVC (Linear kernel)": SVC(kernel="linear", C=C, probability=True, random_state=0),
+                "SVC (rbf kernel)": SVC(kernel="rbf", C=C, probability=True, random_state=0),
                 "L1 logistic": LogisticRegression(
                     C=C, penalty="l1", solver="saga", multi_class="multinomial", max_iter=10000
                 ),
@@ -1632,23 +1622,29 @@ class CropDataHandler:
                     C=C, penalty="l2", solver="saga", multi_class="ovr", max_iter=10000
                 ),
                 "logistic": LogisticRegression(solver="liblinear", random_state=0),
-                "Linear SVC": SVC(kernel="linear", C=C, probability=True, random_state=0),  # Needs over 100K samples
                 # "GPC": GaussianProcessClassifier(kernel),
                 " DecisionTreeClassifier": DecisionTreeClassifier(),
                 " DecisionTreeClassifier (entropy)": DecisionTreeClassifier(criterion="entropy", max_depth=3),
                 " RandomForest Classifier": RandomForestClassifier(n_estimators=100),
-                # "Random Forest": RandomForestRegressor(random_state=0),
-                "SDG": SGDClassifier(
-                    max_iter=1000, tol=0.01
-                ),  # Stocastic models can offer different results each time they are run. Their behaviour incorporates elements for randomness.
+                # "SDG": SGDClassifier(
+                #     max_iter=1000, tol=0.01
+                # ),  # Stocastic models can offer different results each time they are run. Their behaviour incorporates elements for randomness.
                 # see https://machinelearningmastery.com/different-results-each-time-in-machine-learning/
             }
 
             for index, (name, classifier) in enumerate(classifiers.items()):
 
+                scores_dict = {}
+
+                kf = StratifiedKFold(n_splits=5, shuffle=True)
+                scores_stratified_KFold = cross_val_score(classifier, x_train, y_train, cv=kf)
                 # Can use cross_val_score to get averages
-                scores = cross_val_score(classifier, x_train, y_train, cv=5)
-                log.info(name + " %0.2f accuracy with a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+                scores_cross_val = cross_val_score(classifier, x_train, y_train, cv=5)
+                log.info(
+                    name
+                    + " %0.2f accuracy with a standard deviation of %0.2f"
+                    % (scores_cross_val.mean(), scores_cross_val.std())
+                )
                 classifier = classifier.fit(x_train, y_train)
 
                 log.info(f"{name} coefficient of determination (train): {classifier.score(x_train, y_train)}")
@@ -1665,11 +1661,22 @@ class CropDataHandler:
                 c.ax_.set_title(f"{name}, Accuracy {accuracy}")
                 plt.show()
 
+                scores_dict["scores_stratified_KFold"] = scores_stratified_KFold.mean()
+                scores_dict["scores_cross_val"] = scores_cross_val.mean()
+                scores_dict["accuracy_score"] = accuracy
+                results[name] = scores_dict
+
         _test_classifiers(x_train, x_test, y_train, y_test)
 
-        comparison = pd.DataFrame.from_dict(results, orient="index")
-        log.info(comparison)
-        comparison.plot.bar()
+        model_scores_df = pd.DataFrame.from_dict(results, orient="index")
+        fig, axs = plt.subplots(figsize=(15, 15))
+        axs.set_ylabel("Classifier model")
+        axs.set_xlabel("Score")
+        axs.tick_params(axis="both", labelsize=20)
+        model_scores_df.plot.bar(ax=axs)
+        plt.rcParams.update({"font.size": 20})
+        plt.xticks(rotation=45, ha="right")
+        fig.suptitle("Model scores comparison")
         plt.show()
 
     def get_farm_bounds_as_pandas_df_for_analysis(self) -> DataFrame:
@@ -1984,7 +1991,7 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, f
     # crop_data_handler.create_cropped_rgb_image()
     # crop_data_handler.preview_farm_bands()
 
-    log.debug("Done")
+    log.info("Done")
 
 
 if __name__ == "__main__":
