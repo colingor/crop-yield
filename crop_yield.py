@@ -995,8 +995,10 @@ class CropDataHandler:
             ax.axes.xaxis.set_visible(False)
             ax.axes.yaxis.set_visible(False)
 
-            with rasterio.open(product[band_to_display], "r") as src:
-                plot.show(src, ax=ax, cmap="terrain")
+            raster_path = product[band_to_display]
+            if raster_path:
+                with rasterio.open(raster_path, "r") as src:
+                    plot.show(src, ax=ax, cmap="terrain")
 
             return product
 
@@ -1580,6 +1582,8 @@ class CropDataHandler:
 
         stats.pearsonr(df[field], df[MEAN_NDVI])
         stats.pearsonr(df[MEAN_NDWI], df[MEAN_NDVI])
+
+        sns.pairplot(df[[BAND_8_10M, BAND_2_10M, BAND_4_10M, BAND_3_10M, CARBON_RATING]], diag_kind='kde')
 
     def perform_analysis(self):
         """
