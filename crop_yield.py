@@ -1666,18 +1666,29 @@ class CropDataHandler:
                 scores_dict["accuracy_score"] = accuracy
                 results[name] = scores_dict
 
-        _test_classifiers(x_train, x_test, y_train, y_test)
+            model_scores_df = pd.DataFrame.from_dict(results, orient="index")
+            fig, axs = plt.subplots(figsize=(15, 15))
+            axs.set_xlabel("Classifier model")
+            axs.set_ylabel("Score")
+            axs.tick_params(axis="both", labelsize=20)
+            model_scores_df.plot.bar(ax=axs)
+            plt.rcParams.update({"font.size": 20})
+            plt.xticks(rotation=45, ha="right")
+            fig.suptitle("Model scores comparison")
+            plt.show()
 
-        model_scores_df = pd.DataFrame.from_dict(results, orient="index")
-        fig, axs = plt.subplots(figsize=(15, 15))
-        axs.set_xlabel("Classifier model")
-        axs.set_ylabel("Score")
-        axs.tick_params(axis="both", labelsize=20)
-        model_scores_df.plot.bar(ax=axs)
-        plt.rcParams.update({"font.size": 20})
-        plt.xticks(rotation=45, ha="right")
-        fig.suptitle("Model scores comparison")
-        plt.show()
+            # Display the same info in a boxplot
+            model_scores_df_transposed = model_scores_df.transpose()
+            fig, axs = plt.subplots(figsize=(15, 15))
+            axs.set_xlabel("Classifier model")
+            axs.set_ylabel("Score")
+            fig.suptitle("Model scores comparison")
+            plt.xticks(rotation=45, ha="right")
+            plt.boxplot(model_scores_df_transposed, labels=[r for r in classifiers.keys()], showmeans=True)
+            plt.savefig(f"{ANALYSIS_RESULTS_DIR}/classifier_comparison_carbon.jpg")
+            plt.show()
+
+        _test_classifiers(x_train, x_test, y_train, y_test)
 
     def get_farm_bounds_as_pandas_df_for_analysis(self) -> DataFrame:
         """
