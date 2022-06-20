@@ -1872,6 +1872,7 @@ class CropDataHandler:
         # for each of the soil test categories
         # self._test_linear_svc_classifier_with_different_band_combinations_inputs()
 
+        # Plot the best performing band combinations (based on output from _test_linear_svc_classifier_with_different_band_combinations_inputs())
         self._plot_best_performing_linear_svc_classifier_with_different_band_combinations_inputs()
 
     def get_farm_bounds_as_pandas_df_for_analysis(self) -> DataFrame:

@@ -2,7 +2,7 @@
 
 This script provides a means to download Sentinel 2 data for the specified farm regions, crop the images for each field and check
 which are cloud covered. It loads the soil test data for each field and gets the nearest cloud free images to the date the soil
-tests were conducted. The mean of each band of the selected Sentinel 2 product are calculated and added to the final [farms.csv](data/sentinel2/farm_summaries/farms.csv)
+tests were conducted. The mean of each band of the selected Sentinel 2 product is calculated and added to the final [farms.csv](data/sentinel2/farm_summaries/farms.csv)
 dataframe. This dataframe forms the basis of further analysis.
 
 Once the above steps have been completed, the analysis functionality can be run to examine the data. Note that [farms.csv](data/sentinel2/farm_summaries/farms.csv) has already
@@ -110,10 +110,10 @@ viewing in QGIS if you are interested in other granules. Once you have determine
 If you have downloaded new Sentinel products, the next step you have to perform is to crop the product images to the 
 bounds of individual fields by supplying the `-ci` option. A number of things happen at this point:
 * For each farm, the code crops all product rasters to the specified bounding box. Once complete, in each product, navigate to 
-* something like`data/sentinel2/S2B_MSIL2A_20211227T052229_N0301_R062_T43PFS_20211227T074640.SAFE/GRANULE/L2A_T43PFS_A025113_20211227T053237/IMG_DATA_CROPPED`
+something like`data/sentinel2/S2B_MSIL2A_20211227T052229_N0301_R062_T43PFS_20211227T074640.SAFE/GRANULE/L2A_T43PFS_A025113_20211227T053237/IMG_DATA_CROPPED`
 (substituting the correct product path) to see a list of the cropped rasters for each farm.
 * Next, the code attempts to generate a list of cloud free Sentinel 2 product ids for each farm. It does this by inspecting the 
-scene classification rasters supplied with each product and looking for various forms of clouds (search for  `Scene classification keys`).
+scene classification rasters supplied with each product and looking for various forms of clouds (search for  `Scene classification keys` in the script).
 If a cloudy pixel is found, we ignore the product. This seems to work reasonably well although isn't foolproof.
 * Once we have a list of cloud free products for each farm, this is persisted in [all_farms_24_05_22_cloud_free_products.geojson](data/farm_locations/all_farms_24_05_22_cloud_free_products.geojson). If
 you wish to regenerate this list, you have to delete this file.
@@ -183,7 +183,7 @@ to time constraints the code only uses the four 10m bands and only looks for a l
 The same bands are passed to a number of classifier models. The code generates various information for each,
 including plots of confusion matrices and accuracy scores. We generate accuracy scores using three different methods.
 See the sklearn docs for further info, but essentially I think the `scores_stratified_KFold` and `scores_cross_val` are
-a more indicator of performance as they splice and dice the training data a number of times. We then store the mean value for each.
+a more accurate indicator of performance as they splice and dice the training data a number of times. We then store the mean value for each.
 After all classifiers have been tested, a couple of plots are generated.
 
 Below shows the spread of scores using the four 10m bands looking for a relation to the carbon soil test results
@@ -192,7 +192,7 @@ Below shows the spread of scores using the four 10m bands looking for a relation
 Given time, this should be extended to use more bands (varying combinations) and also to look for links to the other 
 soil test results.
 
-### Test LinearClassifier with combinations of 10 and 20m bands for each soil test field
+### Test LinearClassifier with combinations of 10 and 20m bands for each soil test category
 
 The `_test_linear_svc_classifier_with_different_band_combinations_inputs` function starts with a list of the 10 and 20m 
 bands. The idea of this analysis is to sequentially pass all combinations of each of these bands to the LinearSVC classifier and
