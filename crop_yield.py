@@ -7,6 +7,7 @@ import sys
 import zipfile
 from dataclasses import dataclass
 from glob import glob
+from itertools import chain, combinations
 from logging import handlers
 from pathlib import Path
 from typing import List
@@ -35,7 +36,7 @@ from sentinelsat.sentinel import SentinelAPI
 from shapely.geometry import Polygon, MultiPolygon, shape
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.gaussian_process.kernels import RBF
-from sklearn.linear_model import SGDClassifier, LogisticRegression
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     plot_confusion_matrix,
@@ -185,9 +186,6 @@ class CropDataHandler:
         os.makedirs(FARM_SENTINEL_DATA_DIRECTORY, exist_ok=True)
         os.makedirs(FARM_SUMMARIES_DIRECTORY, exist_ok=True)
         os.makedirs(ANALYSIS_RESULTS_DIR, exist_ok=True)
-
-        # Create api instance
-        self.configure_api()
 
         self.extract_geometries()
 
@@ -512,6 +510,10 @@ class CropDataHandler:
         Get available sentinel 2 products and download
         :return:
         """
+
+        # Set up api with credentials
+        self.configure_api()
+
         self.get_available_sentinel_products_df(verify_products=False)
 
         self.download_sentinel_product_files()
@@ -1570,28 +1572,186 @@ class CropDataHandler:
 
         sns.pairplot(df[[BAND_8_10M, BAND_2_10M, BAND_4_10M, BAND_3_10M, CARBON_RATING]], diag_kind="kde")
 
-    def perform_analysis(self):
+    def _test_linear_svc_classifier_with_different_band_combinations_inputs(self):
         """
-        Work in progress - perform some sort of analysis
+        Test LinearSVC classifier with different combinations of the 10 and 20m bands
+        Scores are saved to the farm_summaries_analysis directory in csv and plots
         """
 
-        # self._plot_rgb_for_fields_chosen_for_analysis()
-        #
-        # # Have to treat each individually as we have results for some and not others
-        # soil_test_columns = [NITROGEN_RATING, PHOSPHORUS_RATING, POTASSIUM_RATING, CARBON_RATING]
-        #
-        # # Plot correlation matrices for each test field
-        # [self._correlation_plots(soil_test_columns, field) for field in soil_test_columns]
+        # Only use a subset of bands as we want to test the model with all combinations
+        # If we used all the band means available, we would have over 16 millions combinations!
+
+        # 4096 combinations with this list
+        test_bands = [
+            BAND_8_10M,
+            BAND_2_10M,
+            BAND_4_10M,
+            BAND_3_10M,
+            BAND_3_20M,
+            BAND_4_20M,
+            BAND_5_20M,
+            BAND_6_20M,
+            BAND_7_20M,
+            BAND_8A_20M,
+            BAND_11_20M,
+            BAND_12_20M,
+        ]
+
+        # test_bands = [
+        #     BAND_8_10M,
+        #     BAND_2_10M,
+        # ]
+
+        def _all_subsets(bands: list):
+            """
+            Get all combinations of the supplied bands
+            :param bands:
+            :return:
+            """
+            # Taken from https://stackoverflow.com/a/5898031
+            return chain(*map(lambda x: combinations(bands, x), range(0, len(bands) + 1)))
+
+        def _plot_results(results, soil_test_field):
+            bands_scores = pd.DataFrame.from_dict(results, orient="index")
+            bands_scores.to_csv(f"{ANALYSIS_RESULTS_DIR}/{soil_test_field}_10_20_bands.csv")
+            fig, axs = plt.subplots(figsize=(15, 15))
+            axs.set_xlabel("Band combinations")
+            axs.set_ylabel("Score")
+            axs.tick_params(axis="both", labelsize=20)
+            bands_scores.plot.bar(ax=axs)
+            plt.rcParams.update({"font.size": 10})
+            plt.xticks(rotation=45, ha="right")
+            fig.suptitle(f"band scores comparison: {soil_test_field}")
+            plt.show()
+
+            # Display the same info in a boxplot
+            model_scores_df_transposed = bands_scores.transpose()
+            fig, axs = plt.subplots(figsize=(15, 15))
+            axs.set_xlabel("Classifier model")
+            axs.set_ylabel("Score")
+            fig.suptitle(f"band scores comparison  {soil_test_field}")
+            plt.xticks(rotation=45, ha="right")
+            plt.rcParams.update({"font.size": 10})
+            plt.boxplot(model_scores_df_transposed, labels=[r for r in results.keys()], showmeans=True)
+            plt.savefig(f"{ANALYSIS_RESULTS_DIR}/{soil_test_field}_10_20_bands.jpg")
+            plt.show()
+
+        def _score_band_combinations(soil_test_field):
+            """
+            Test all combinations of test_bands. Add the results to a dict so we can analyse
+
+            """
+            results = {}
+
+            # Get the dataframe we want to work with
+            fields_df = self.get_farm_bounds_as_pandas_df_for_analysis()
+
+            # Filter out results with test values of 0 as these are records where no results were supplied
+            fields_df = fields_df[fields_df[soil_test_field] > 0]
+
+            # Iterate through all combinations of supplied bands
+            for subset in _all_subsets(test_bands):
+                log.info(subset)
+                if subset:
+
+                    # Test this subset of bands
+                    x_train, x_test, y_train, y_test = train_test_split(
+                        fields_df[[band for band in subset]],
+                        fields_df[soil_test_field],
+                        train_size=0.75,
+                        shuffle=True,
+                    )
+                    classifier = LinearSVC(max_iter=20000)
+                    classifier = classifier.fit(x_train, y_train)
+
+                    y_pred = classifier.predict(x_test)
+                    accuracy = accuracy_score(y_test, y_pred)
+
+                    kf = StratifiedKFold(n_splits=5, shuffle=True)
+                    scores_stratified_KFold = cross_val_score(classifier, x_train, y_train, cv=kf)
+
+                    # Can use cross_val_score to get averages
+                    scores_cross_val = cross_val_score(classifier, x_train, y_train, cv=5)
+
+                    scores_dict = {}
+                    scores_dict["scores_stratified_KFold"] = scores_stratified_KFold.mean()
+                    scores_dict["scores_cross_val"] = scores_cross_val.mean()
+                    scores_dict["accuracy_score"] = accuracy
+
+                    results[" ".join(subset)] = scores_dict
+
+            _plot_results(results, soil_test_field)
+
+        # Iterate over each of the test fields, score on different band combinations and plot results
+        [
+            _score_band_combinations(soil_test_field)
+            for soil_test_field in (CARBON_RATING, NITROGEN_RATING, POTASSIUM_RATING, PHOSPHORUS_RATING)
+        ]
+
+    def _plot_best_performing_linear_svc_classifier_with_different_band_combinations_inputs(self):
+        """
+        Plot the 10 best performing band combinations for each soil test category
+        :return:
+        """
+
+        def _plot_10_best_performing_combinations(soil_test_field):
+            df = pd.read_csv(f"{ANALYSIS_RESULTS_DIR}/{soil_test_field}_10_20_bands.csv", index_col=0)
+
+            df["mean"] = df.mean(axis=1)
+            df = df.sort_values("mean", ascending=False).head(10)
+
+            fig, axs = plt.subplots(figsize=(15, 15))
+            axs.set_xlabel("Band combinations")
+            axs.set_ylabel("Score")
+            axs.tick_params(axis="both", labelsize=10)
+            df.plot.bar(ax=axs)
+            plt.rcParams.update({"font.size": 10})
+            plt.xticks(rotation=45, ha="right")
+            fig.suptitle(f"10 best performing band scores comparison for {soil_test_field}")
+            plt.savefig(f"{ANALYSIS_RESULTS_DIR}/{soil_test_field}_10_20_top_performing_bands_bar.jpg")
+            plt.show()
+
+            model_scores_df_transposed = df.transpose()
+            fig, axs = plt.subplots(figsize=(15, 15))
+            axs.set_xlabel("Band combinations")
+            axs.set_ylabel("Score")
+            fig.suptitle(f"10 best performing band scores comparison for {soil_test_field}")
+            plt.xticks(rotation=45, ha="right")
+            plt.rcParams.update({"font.size": 10})
+            plt.boxplot(
+                model_scores_df_transposed, labels=[r for r in model_scores_df_transposed.columns], showmeans=True
+            )
+            plt.savefig(f"{ANALYSIS_RESULTS_DIR}/{soil_test_field}_10_20_top_performing_bands_box.jpg")
+            plt.show()
+
+        [
+            _plot_10_best_performing_combinations(soil_test_field)
+            for soil_test_field in (CARBON_RATING, NITROGEN_RATING, POTASSIUM_RATING, PHOSPHORUS_RATING)
+        ]
+
+    def test_different_classifiers(self):
+        """
+        Iterate through and test a number of classifiers. We get 3 different scores which are added to results
+        which is then converted to a dataframe and plotted
+        """
+
+        results = {}
 
         # Get the dataframe we want to work with
         fields_df = self.get_farm_bounds_as_pandas_df_for_analysis()
-        # test_bands = list(set(ALL_BANDS) - set([BAND_SCL_20M, BAND_SCL_60M, BAND_TCI_10M, BAND_TCI_20M]))
 
-        # Probably want to test a subset of bands
-        test_bands = [BAND_8_10M, BAND_2_10M, BAND_4_10M, BAND_3_10M]
         # test_bands = [MEAN_NDWI, MEAN_NDVI]
 
-        # Specify band - look at carbon rating initially
+        # test_bands = list(set(ALL_BANDS) - set([BAND_SCL_20M, BAND_SCL_60M, BAND_TCI_10M, BAND_TCI_20M]))
+
+        # Just use a subset of all bands for now
+        test_bands = [
+            BAND_8_10M,
+            BAND_2_10M,
+            BAND_4_10M,
+            BAND_3_10M,
+        ]
+        # Specify band - look at carbon rating initially. Remove ratings of 0 as these are records with no results
         fields_df = fields_df[fields_df[CARBON_RATING] > 0]
 
         # Split into test and train. Looking at carbon for the moment
@@ -1599,96 +1759,120 @@ class CropDataHandler:
             fields_df[[band for band in test_bands]], fields_df[CARBON_RATING], train_size=0.75, shuffle=True
         )
 
-        results = {}
+        C = 10
+        kernel = 1.0 * RBF([1.0, 1.0])  # for GPC
 
-        def _test_classifiers(x_train, x_test, y_train, y_test):
-            C = 10
-            kernel = 1.0 * RBF([1.0, 1.0])  # for GPC
+        # Linear SVC -> KNeighbours -> SVC
+        # (see https://scikit-learn.org/stable/tutorial/machine_learning_map/index.html)
+        classifiers = {
+            "LinearSVC": LinearSVC(),
+            "LinearSVC modified": LinearSVC(C=2, class_weight="balanced"),
+            "SVC (Linear kernel)": SVC(kernel="linear", C=1, probability=True, random_state=0),
+            "SVC (Linear kernel 2)": SVC(kernel="linear", C=10, gamma=10, probability=True, random_state=0),
+            "KNeighbors": KNeighborsClassifier(),
+            "SVC (Linear kernel)": SVC(kernel="linear", C=C, probability=True, random_state=0),
+            "SVC (rbf kernel)": SVC(kernel="rbf", C=C, probability=True, random_state=0),
+            "L1 logistic": LogisticRegression(
+                C=C, penalty="l1", solver="saga", multi_class="multinomial", max_iter=10000
+            ),
+            "L2 logistic (Multinomial)": LogisticRegression(
+                C=C, penalty="l2", solver="saga", multi_class="multinomial", max_iter=10000
+            ),
+            "L2 logistic (OvR)": LogisticRegression(
+                C=C, penalty="l2", solver="saga", multi_class="ovr", max_iter=10000
+            ),
+            "logistic": LogisticRegression(solver="liblinear", random_state=0),
+            # "GPC": GaussianProcessClassifier(kernel),
+            " DecisionTreeClassifier": DecisionTreeClassifier(),
+            " DecisionTreeClassifier (entropy)": DecisionTreeClassifier(criterion="entropy", max_depth=3),
+            " RandomForest Classifier": RandomForestClassifier(n_estimators=100),
+            # "SDG": SGDClassifier(
+            #     max_iter=1000, tol=0.01
+            # ),  # Stocastic models can offer different results each time they are run. Their behaviour incorporates elements for randomness.
+            # see https://machinelearningmastery.com/different-results-each-time-in-machine-learning/
+        }
 
-            # Linear SVC -> KNeighbours -> SVC
-            # Create different classifiers.
-            classifiers = {
-                "LinearSVC": LinearSVC(),
-                "KNeighbors": KNeighborsClassifier(),
-                "SVC (Linear kernel)": SVC(kernel="linear", C=C, probability=True, random_state=0),
-                "SVC (rbf kernel)": SVC(kernel="rbf", C=C, probability=True, random_state=0),
-                "L1 logistic": LogisticRegression(
-                    C=C, penalty="l1", solver="saga", multi_class="multinomial", max_iter=10000
-                ),
-                "L2 logistic (Multinomial)": LogisticRegression(
-                    C=C, penalty="l2", solver="saga", multi_class="multinomial", max_iter=10000
-                ),
-                "L2 logistic (OvR)": LogisticRegression(
-                    C=C, penalty="l2", solver="saga", multi_class="ovr", max_iter=10000
-                ),
-                "logistic": LogisticRegression(solver="liblinear", random_state=0),
-                # "GPC": GaussianProcessClassifier(kernel),
-                " DecisionTreeClassifier": DecisionTreeClassifier(),
-                " DecisionTreeClassifier (entropy)": DecisionTreeClassifier(criterion="entropy", max_depth=3),
-                " RandomForest Classifier": RandomForestClassifier(n_estimators=100),
-                # "SDG": SGDClassifier(
-                #     max_iter=1000, tol=0.01
-                # ),  # Stocastic models can offer different results each time they are run. Their behaviour incorporates elements for randomness.
-                # see https://machinelearningmastery.com/different-results-each-time-in-machine-learning/
-            }
+        for index, (name, classifier) in enumerate(classifiers.items()):
 
-            for index, (name, classifier) in enumerate(classifiers.items()):
+            # We score each classifier in 3 different ways out of interest
+            scores_dict = {}
 
-                scores_dict = {}
+            kf = StratifiedKFold(n_splits=5, shuffle=True)
+            scores_stratified_KFold = cross_val_score(classifier, x_train, y_train, cv=kf)
+            # Can use cross_val_score to get averages
+            scores_cross_val = cross_val_score(classifier, x_train, y_train, cv=5)
+            log.info(
+                name
+                + " %0.2f accuracy with a standard deviation of %0.2f"
+                % (scores_cross_val.mean(), scores_cross_val.std())
+            )
+            classifier = classifier.fit(x_train, y_train)
 
-                kf = StratifiedKFold(n_splits=5, shuffle=True)
-                scores_stratified_KFold = cross_val_score(classifier, x_train, y_train, cv=kf)
-                # Can use cross_val_score to get averages
-                scores_cross_val = cross_val_score(classifier, x_train, y_train, cv=5)
-                log.info(
-                    name
-                    + " %0.2f accuracy with a standard deviation of %0.2f"
-                    % (scores_cross_val.mean(), scores_cross_val.std())
-                )
-                classifier = classifier.fit(x_train, y_train)
+            log.info(f"{name} coefficient of determination (train): {classifier.score(x_train, y_train)}")
+            log.info(f"{name} coefficient of determination (test): {classifier.score(x_test, y_test)}")
+            y_pred = classifier.predict(x_test)
+            accuracy = accuracy_score(y_test, y_pred)
+            # Maybe we should use the average from scores here
+            results[name] = accuracy
+            log.info("Accuracy for %s: %0.1f%% " % (name, accuracy * 100))
 
-                log.info(f"{name} coefficient of determination (train): {classifier.score(x_train, y_train)}")
-                log.info(f"{name} coefficient of determination (test): {classifier.score(x_test, y_test)}")
-                y_pred = classifier.predict(x_test)
-                accuracy = accuracy_score(y_test, y_pred)
-                # Maybe we should use the average from scores here
-                results[name] = accuracy
-                log.info("Accuracy for %s: %0.1f%% " % (name, accuracy * 100))
-
-                cm = confusion_matrix(y_test, y_pred)
-                log.info(cm)
-                c = plot_confusion_matrix(classifier, x_test, y_test, cmap="GnBu")
-                c.ax_.set_title(f"{name}, Accuracy {accuracy}")
-                plt.show()
-
-                scores_dict["scores_stratified_KFold"] = scores_stratified_KFold.mean()
-                scores_dict["scores_cross_val"] = scores_cross_val.mean()
-                scores_dict["accuracy_score"] = accuracy
-                results[name] = scores_dict
-
-            model_scores_df = pd.DataFrame.from_dict(results, orient="index")
-            fig, axs = plt.subplots(figsize=(15, 15))
-            axs.set_xlabel("Classifier model")
-            axs.set_ylabel("Score")
-            axs.tick_params(axis="both", labelsize=20)
-            model_scores_df.plot.bar(ax=axs)
-            plt.rcParams.update({"font.size": 20})
-            plt.xticks(rotation=45, ha="right")
-            fig.suptitle("Model scores comparison")
+            cm = confusion_matrix(y_test, y_pred)
+            log.info(cm)
+            c = plot_confusion_matrix(classifier, x_test, y_test, cmap="GnBu")
+            c.ax_.set_title(f"{name}, Accuracy {accuracy}")
             plt.show()
 
-            # Display the same info in a boxplot
-            model_scores_df_transposed = model_scores_df.transpose()
-            fig, axs = plt.subplots(figsize=(15, 15))
-            axs.set_xlabel("Classifier model")
-            axs.set_ylabel("Score")
-            fig.suptitle("Model scores comparison")
-            plt.xticks(rotation=45, ha="right")
-            plt.boxplot(model_scores_df_transposed, labels=[r for r in classifiers.keys()], showmeans=True)
-            plt.savefig(f"{ANALYSIS_RESULTS_DIR}/classifier_comparison_carbon.jpg")
-            plt.show()
+            scores_dict["scores_stratified_KFold"] = scores_stratified_KFold.mean()
+            scores_dict["scores_cross_val"] = scores_cross_val.mean()
+            scores_dict["accuracy_score"] = accuracy
+            results[name] = scores_dict
 
-        _test_classifiers(x_train, x_test, y_train, y_test)
+        # Plot the scores for each in bar charts
+        model_scores_df = pd.DataFrame.from_dict(results, orient="index")
+        fig, axs = plt.subplots(figsize=(15, 15))
+        axs.set_xlabel("Classifier model")
+        axs.set_ylabel("Score")
+        axs.tick_params(axis="both", labelsize=20)
+        model_scores_df.plot.bar(ax=axs)
+        plt.rcParams.update({"font.size": 20})
+        plt.xticks(rotation=45, ha="right")
+        fig.suptitle("Model scores comparison")
+        plt.show()
+
+        # Display the same info in a boxplot
+        model_scores_df_transposed = model_scores_df.transpose()
+        fig, axs = plt.subplots(figsize=(15, 15))
+        axs.set_xlabel("Classifier model")
+        axs.set_ylabel("Score")
+        fig.suptitle("Model scores comparison")
+        plt.xticks(rotation=45, ha="right")
+        plt.boxplot(model_scores_df_transposed, labels=[r for r in classifiers.keys()], showmeans=True)
+        plt.savefig(f"{ANALYSIS_RESULTS_DIR}/classifier_comparison_carbon.jpg")
+        plt.show()
+
+    def perform_analysis(self):
+        """
+        Work in progress - perform various analysis to see if we can find any relationships between band means and
+        soil test results
+        """
+
+        # Plot a summary image containing RGB images of all of our fields
+        # self._plot_rgb_for_fields_chosen_for_analysis()
+
+        # Plot correlation matrices for each test field
+        # Have to treat each individually as we have results for some and not others
+        # soil_test_columns = [NITROGEN_RATING, PHOSPHORUS_RATING, POTASSIUM_RATING, CARBON_RATING]
+        # [self._correlation_plots(soil_test_columns, field) for field in soil_test_columns]
+
+        # Test list of classifiers with 10m bands to see if there is any relationship with carbon soil results.
+        # TODO - check other soil test results and also try other band combinations
+        # self.test_different_classifiers()
+
+        # Focus on LinearSVC. Pass all combinations of the 10 and 20m bands to this model, store and plot accuracy scores
+        # for each of the soil test categories
+        # self._test_linear_svc_classifier_with_different_band_combinations_inputs()
+
+        self._plot_best_performing_linear_svc_classifier_with_different_band_combinations_inputs()
 
     def get_farm_bounds_as_pandas_df_for_analysis(self) -> DataFrame:
         """
@@ -1909,8 +2093,6 @@ class CropDataHandler:
 
                 cloud_free_products_df = cloud_free_products_df.apply(fix_band_paths, axis=1)
                 cloud_free_products_df.to_file(farm_products_path, driver="GeoJSON")
-            # else:
-            #     cloud_free_products_df = gpd.read_file(farm_products_path)
 
             return farm_details
 
@@ -1920,8 +2102,12 @@ class CropDataHandler:
 
 
 @click.command(context_settings=dict(ignore_unknown_options=True))
-@click.option("--download", "-d", is_flag=True, help="Download Sentinel 2 data")
-# @click.option("--crop-all", "-ca", is_flag=True, help="Crop Sentinel 2 rasters to bounds of all farms")
+@click.option(
+    "--download",
+    "-d",
+    is_flag=True,
+    help="Download Sentinel 2 data. Note the downloader can be unreliable and you may have to kill and restart the script repeatedly",
+)
 @click.option(
     "--crop-individual-farms",
     "-ci",
@@ -1930,14 +2116,6 @@ class CropDataHandler:
 )
 @click.option("--farm_summaries", "-fs", is_flag=True, help="Generate summary jpegs for specified bands over time")
 @click.option("--farm_analysis", "-fa", is_flag=True, help="Perform analysis on farms dataframe.  In progress")
-# @click.option("--ndvi", "-ndvi", is_flag=True, help="Generate ndvi tifs for each farm")
-# @click.option("--ndwi", "-ndwi", is_flag=True, help="Generate ndwi tifs for each farm")
-# @click.option(
-#     "--farm_summaries_all",
-#     "-fsa",
-#     is_flag=True,
-#     help="Generate summary jpegs for the bbox of all farms for specified bands",
-# )
 @click.option(
     "--sentinel_date_range",
     required=True,
@@ -1953,7 +2131,6 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, f
     If you wish to download (-d), please ensure you set "SENTINEL_USER" and "SENTINEL_PASSWORD"
     environment variables. An account can be created at https://scihub.copernicus.eu/dhus/#/self-registration
 
-    :param ndvi:
     :param farm_summaries:
     :param crop_individual_farms:
     :param download:
@@ -1962,11 +2139,7 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, f
     crop_data_handler = CropDataHandler(sentinel_date_range)
 
     if download:
-
         crop_data_handler.download_sentinel_products()
-
-    # if crop_all:
-    #     crop_data_handler.crop_rasters_to_all_fields_bbox()
 
     if crop_individual_farms:
         crop_data_handler.crop_rasters_to_individual_fields_bbox()
@@ -1978,29 +2151,6 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, f
 
     if farm_analysis:
         crop_data_handler.perform_analysis()
-
-    # if ndvi:
-    #     crop_data_handler.apply_raster_analysis_function_all_farms(crop_data_handler.generate_mean_ndvi)
-    #     crop_data_handler.plot_mean_ndvi()
-    #
-    # if ndwi:
-    #     crop_data_handler.apply_raster_analysis_function_all_farms(crop_data_handler.generate_mean_ndwi)
-
-    # Generate band distribution histograms
-    # crop_data_handler.generate_all_farms_band_histograms()
-
-    # if farm_summaries_all:
-    #     crop_data_handler.generate_all_farms_bands_summary()
-
-    # 0 is narasayya 76.9746213,15.1076625
-    # pixels = crop_data_handler.get_pixel_for_location_all_products(
-    #     farm_index=0, band=BAND_4_10M, x=76.9746213, y=15.1076625
-    # )
-
-    # crop_data_handler.generate_individual_farm_cloud_series_over_time(0, True)
-    # crop_data_handler.add_cloud_free_products_to_farms_df()
-    # crop_data_handler.create_cropped_rgb_image()
-    # crop_data_handler.preview_farm_bands()
 
     log.info("Done")
 
