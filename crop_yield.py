@@ -1699,6 +1699,7 @@ class CropDataHandler:
 
             df["mean"] = df.mean(axis=1)
             df = df.sort_values("mean", ascending=False).head(10)
+            # NOTE - you may want to save this dataframe to csv for further analysis
 
             fig, axs = plt.subplots(figsize=(15, 15))
             axs.set_xlabel("Band combinations")
