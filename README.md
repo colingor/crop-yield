@@ -212,8 +212,9 @@ it doesn't appear any of the band combinations with passed to the LinearSVC are 
 The 10 best performing band combinations for carbon prediction can be seen in the following bar and box plots:
 ![carbon_rating_10_20_top_performing_bands_bar](data/sentinel2/farm_summaries/analysis/carbon_rating_10_20_top_performing_bands_bar.jpg)
 ![carbon_rating_10_20_top_performing_bands_box](data/sentinel2/farm_summaries/analysis/carbon_rating_10_20_top_performing_bands_box.jpg)
+**Best performing bands for carbon: B04_10m B03_10m B8A_20m B11_20m**
 
-  
+
 * The phosphorous soil test results band analysis results are stored in
   [phosphorus_rating_10_20_bands.csv](data/sentinel2/farm_summaries/analysis/phosphorus_rating_10_20_bands.csv). A similar plot shows slightly improved
 performance with mean scores in the 40-55% region. This probably warrants further investigation, possibly tuning LinearSVC further or trying
@@ -222,6 +223,7 @@ another classifier to see if the results can be bettered.
 The 10 best performing band combinations for phosphorus prediction can be seen in the following bar and box plots:
 ![phosphorus_rating_10_20_top_performing_bands_bar](data/sentinel2/farm_summaries/analysis/phosphorus_rating_10_20_top_performing_bands_bar.jpg)
 ![phosphorus_rating_10_20_top_performing_bands_box](data/sentinel2/farm_summaries/analysis/phosphorus_rating_10_20_top_performing_bands_box.jpg)
+**Best performing bands for phosphorus: B08_10m B02_10m B04_10m B04_20m B07_20m B8A_20m B12_20m**
 
 
 * The nitrogen soil test results band analysis results are stored in
@@ -231,6 +233,8 @@ in the region of 75-85% accuracy. It may be that tuning the existing classifier 
 The 10 best performing band combinations for nitrogen prediction can be seen in the following bar and box plots:
 ![nitrogen_rating_10_20_top_performing_bands_bar](data/sentinel2/farm_summaries/analysis/nitrogen_rating_10_20_top_performing_bands_bar.jpg)
 ![nitrogen_rating_10_20_top_performing_bands_box](data/sentinel2/farm_summaries/analysis/nitrogen_rating_10_20_top_performing_bands_box.jpg)
+**Best performing bands for nitrogen: B08_10m B04_10m B12_20m**
+
 
 * The potassium soil test results band analysis results are stored in
   [potassium_rating_10_20_bands.csv](data/sentinel2/farm_summaries/analysis/potassium_rating_10_20_bands.csv). The results show mean scores in the 75-85% region as
@@ -239,7 +243,7 @@ above.
 The 10 best performing band combinations for potassium prediction can be seen in the following bar and box plots:
 ![potassium_rating_10_20_top_performing_bands_bar](data/sentinel2/farm_summaries/analysis/potassium_rating_10_20_top_performing_bands_bar.jpg)
 ![potassium_rating_10_20_top_performing_bands_box](data/sentinel2/farm_summaries/analysis/potassium_rating_10_20_top_performing_bands_box.jpg)
-
+**Best performing bands for potassium: B02_10m B04_10m B03_20m B05_20m B11_20m B12_20m**
 ## Notes
 
 You may wish to change the log level for the script - see `logging.basicConfig` near the start of the script. If you are
