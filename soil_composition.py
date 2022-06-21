@@ -162,7 +162,7 @@ logging.basicConfig(
 
 
 @dataclass
-class CropDataHandler:
+class DataHandler:
     sentinel_date_range: tuple
     api: SentinelAPI = None
     total_bbox_32643: Polygon = None
@@ -2138,21 +2138,21 @@ def main(download, crop_individual_farms, sentinel_date_range, farm_summaries, f
     :param download:
     :param sentinel_date_range:
     """
-    crop_data_handler = CropDataHandler(sentinel_date_range)
+    data_handler = DataHandler(sentinel_date_range)
 
     if download:
-        crop_data_handler.download_sentinel_products()
+        data_handler.download_sentinel_products()
 
     if crop_individual_farms:
-        crop_data_handler.crop_rasters_to_individual_fields_bbox()
-        crop_data_handler.generate_cloud_free_farm_product_lists(force_recreate=True)
-        crop_data_handler.generate_band_means_at_soil_test_date()
+        data_handler.crop_rasters_to_individual_fields_bbox()
+        data_handler.generate_cloud_free_farm_product_lists(force_recreate=True)
+        data_handler.generate_band_means_at_soil_test_date()
 
     if farm_summaries:
-        crop_data_handler.generate_individual_farm_bands_summary(filter_clouds=True)
+        data_handler.generate_individual_farm_bands_summary(filter_clouds=True)
 
     if farm_analysis:
-        crop_data_handler.perform_analysis()
+        data_handler.perform_analysis()
 
     log.info("Done")
 
