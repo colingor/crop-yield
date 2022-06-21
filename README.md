@@ -1,4 +1,4 @@
-# Crop Yield
+# Soil Composition
 
 This script provides a means to download Sentinel 2 data for the specified farm regions, crop the images for each field and check
 which are cloud covered. It loads the soil test data for each field and gets the nearest cloud free images to the date the soil
@@ -34,12 +34,12 @@ examine the data in more detail and see if we can elicit any links between band 
 
 To see the available options, run with the help flag:
 ```bash
-python crop_yield.py --help
+python soil_composition.py --help
 ```
 Resulting in:
 
 ```
-Usage: crop_yield.py [OPTIONS]
+Usage: soil_composition.py [OPTIONS]
 
   Download and process Sentinel 2 rasters.
 
